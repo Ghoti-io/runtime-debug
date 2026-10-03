@@ -270,6 +270,11 @@ TEST(Framing, ANonOwnerThreadIsRefused) {
   }).join();
   EXPECT_EQ(r, GRDBG_ERR_INVALID);
   EXPECT_EQ(f.wire.output, "");
+  // The events are the owner's too.
+  GRDBG_Result finished = GRDBG_OK;
+  std::thread([&] { finished = grdbg_dap_notify_finished(f.session, 0); }).join();
+  EXPECT_EQ(finished, GRDBG_ERR_INVALID);
+  EXPECT_EQ(f.wire.output, "");
 }
 
 // ---------------------------------------------------------------------------
@@ -286,18 +291,34 @@ TEST(NotARequest, BodiesThatAreNotJsonAreDroppedAndTheSessionContinues) {
   EXPECT_EQ(all[0].command(), "threads");
 }
 
-TEST(NotARequest, JsonThatIsNotAnObjectOrHasNoSeqIsDropped) {
+TEST(NotARequest, JsonThatIsNotAnObjectOrHasNeitherASeqNorACommandIsDropped) {
   Fixture f(dap::frame("[1,2,3]") + dap::frame("42") + dap::frame("\"threads\"") + dap::frame("null") +
-      dap::frame(R"({"type":"request","command":"threads"})") +
-      dap::frame(R"({"seq":"one","type":"request","command":"threads"})") + request(2, "disconnect"));
+      dap::frame("{}") + dap::frame(R"({"type":"request"})") + dap::frame(R"({"seq":"one","type":"request"})") +
+      request(2, "disconnect"));
   GRDBG_ServeResult r;
   ASSERT_EQ(f.serve(&r), GRDBG_OK);
   EXPECT_EQ(f.out().size(), 1u);  // only the disconnect
 }
 
+TEST(NotARequest, ACommandWithoutASeqOrATypeIsStillARequestAnsweredWithRequestSeqZero) {
+  Fixture f(dap::frame(R"({"command":"nonsense"})") + dap::frame(R"({"type":"request","command":"threads"})") +
+      dap::frame(R"({"seq":"one","type":"request","command":"threads"})") + request(2, "disconnect"));
+  GRDBG_ServeResult r;
+  ASSERT_EQ(f.serve(&r), GRDBG_OK);
+  std::vector<dap::Msg> all = f.out();
+  ASSERT_EQ(all.size(), 4u);
+  EXPECT_FALSE(all[0].success());
+  EXPECT_EQ(all[0].message(), "unsupported request: nonsense");
+  EXPECT_EQ(all[0].num("request_seq"), 0);
+  EXPECT_TRUE(all[1].success());
+  EXPECT_EQ(all[1].command(), "threads");
+  EXPECT_EQ(all[1].num("request_seq"), 0);
+  EXPECT_TRUE(all[2].success());
+}
+
 TEST(NotARequest, ASeqWithTheWrongTypeGetsAnErrorResponse) {
   Fixture f(dap::frame(R"({"seq":4,"type":"response","command":"threads"})") +
-      dap::frame(R"({"seq":5,"command":"threads"})") + request(6, "disconnect"));
+      dap::frame(R"({"seq":5,"type":7,"command":"threads"})") + request(6, "disconnect"));
   GRDBG_ServeResult r;
   ASSERT_EQ(f.serve(&r), GRDBG_OK);
   std::vector<dap::Msg> all = f.out();
@@ -319,6 +340,7 @@ TEST(NotARequest, ARequestWithNoCommandGetsAnErrorResponseNamingNothing) {
   EXPECT_FALSE(all[0].success());
   EXPECT_EQ(all[0].command(), "");
   EXPECT_EQ(all[0].message(), "the request has no command");
+  EXPECT_EQ(all[0].num("request_seq"), 4);
   EXPECT_FALSE(all[1].success());
 }
 
@@ -504,6 +526,26 @@ TEST(Surface, ALineOfZeroInAOneBasedClientIsRefusedButNotInAZeroBasedOne) {
   GRDBG_ServeResult r;
   ASSERT_EQ(f.serve(&r), GRDBG_OK);
   EXPECT_TRUE(f.out()[2].success());
+}
+
+TEST(Surface, BytesThatAreNotUtf8GoOutAsReplacementCharactersNotAsAFailedResponse) {
+  // A file name and a value are the engine's to choose, and JSON cannot carry
+  // what is not UTF-8. One bad byte must not cost the whole response.
+  const std::string odd = "b\xff" "d\xc3\x28" "e\xed\xa0\x80" "f\xf4\x90\x80\x80" "g\xe2\x82" ".toy";
+  toy::Program p;
+  p.fn("main", odd, {"x"}).set(1, "x", 3).nop(2);
+  Fixture f(request(1, "stackTrace") + request(2, "disconnect"), 4096, std::move(p));
+  int line = 2;
+  uint64_t id;
+  ASSERT_EQ(grdbg_debugger_set_breakpoints(f.w.dbg, odd.c_str(), &line, 1, &id), GRDBG_OK);
+  f.w.run_to_pause();
+  GRDBG_ServeResult r;
+  ASSERT_EQ(f.serve(&r), GRDBG_OK);
+  const std::string u = "\xef\xbf\xbd";
+  std::vector<dap::Msg> all = f.out();
+  ASSERT_TRUE(all[0].success()) << all[0].text();
+  EXPECT_EQ(all[0].str("body.stackFrames.0.source.path"), "b" + u + "d" + u + "(e" + u + u + u + "f" + u + u + u + u + "g" + u + u + ".toy");
+  EXPECT_EQ(all[0].num("body.stackFrames.0.line"), 2);
 }
 
 TEST(Surface, ColumnsAreReportedAsOne) {

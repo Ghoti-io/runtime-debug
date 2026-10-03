@@ -706,33 +706,46 @@ static GRDBG_Result unsupported(GRDBG_Dap * dap, const GRDBG_Request * rq) {
 
 GRDBG_Result grdbg_dap_handle(GRDBG_Dap * dap, const GTEXT_JSON_Value * root) {
   if (gtext_json_typeof(root) != GTEXT_JSON_OBJECT) {
-    return GRDBG_OK; /* no seq to answer to */
+    return GRDBG_OK; /* nothing to answer to */
   }
   GRDBG_Request rq;
   rq.command = "";
   rq.command_length = 0;
   rq.arguments = NULL;
+  rq.seq = 0;
+
+  /* What a request is, as far as the bytes say: a string `command` makes an
+   * object one, and a `seq` it can be answered by. An object with neither has
+   * nothing to answer to and is dropped; an object with a `seq` but no
+   * command gets an error response; one with a command but no readable `seq`
+   * is answered with request_seq 0, because it is plainly a request and its
+   * client should hear that it was not understood. */
   int64_t seq;
   const GTEXT_JSON_Value * seq_value = gtext_json_object_get(root, "seq", 3);
-  if (seq_value == NULL || gtext_json_get_i64(seq_value, &seq) != GTEXT_JSON_OK) {
-    return GRDBG_OK; /* likewise */
-  }
-  rq.seq = seq;
-
-  const GTEXT_JSON_Value * type = gtext_json_object_get(root, "type", 4);
-  const char * type_text;
-  size_t type_length;
-  if (type == NULL ||
-      gtext_json_get_string(type, &type_text, &type_length) != GTEXT_JSON_OK ||
-      type_length != 7 || memcmp(type_text, "request", 7) != 0) {
-    return grdbg_response_error(dap, &rq, "not a request");
-  }
+  bool has_seq = seq_value != NULL && gtext_json_get_i64(seq_value, &seq) == GTEXT_JSON_OK;
   const GTEXT_JSON_Value * command = gtext_json_object_get(root, "command", 7);
-  if (command == NULL ||
-      gtext_json_get_string(command, &rq.command, &rq.command_length) !=
-          GTEXT_JSON_OK) {
+  bool has_command = command != NULL &&
+      gtext_json_get_string(command, &rq.command, &rq.command_length) == GTEXT_JSON_OK;
+  if (!has_command) {
     rq.command = "";
     rq.command_length = 0;
+  }
+  if (!has_seq && !has_command) {
+    return GRDBG_OK;
+  }
+  rq.seq = has_seq ? seq : 0;
+
+  /* An absent `type` is taken as a request; a present one must say so. */
+  const GTEXT_JSON_Value * type = gtext_json_object_get(root, "type", 4);
+  if (type != NULL) {
+    const char * type_text;
+    size_t type_length;
+    if (gtext_json_get_string(type, &type_text, &type_length) != GTEXT_JSON_OK ||
+        type_length != 7 || memcmp(type_text, "request", 7) != 0) {
+      return grdbg_response_error(dap, &rq, "not a request");
+    }
+  }
+  if (!has_command) {
     return grdbg_response_error(dap, &rq, "the request has no command");
   }
   const GTEXT_JSON_Value * arguments = gtext_json_object_get(root, "arguments", 9);

@@ -202,7 +202,8 @@ GRDBG_Result grdbg_dap_notify_stopped(GRDBG_Dap * dap) {
 }
 
 GRDBG_Result grdbg_dap_notify_finished(GRDBG_Dap * dap, int exit_code) {
-  if (dap == NULL) {
+  if (dap == NULL ||
+      !grcore_context_is_owner(grdbg_debugger_context(dap->debugger))) {
     return GRDBG_ERR_INVALID;
   }
   if (dap->failure != GRDBG_OK) {

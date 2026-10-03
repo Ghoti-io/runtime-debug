@@ -128,12 +128,95 @@ void grdbg_out_key(GRDBG_Out * out, const char * key) {
   STEP(out, gtext_json_writer_key(out->writer, key, strlen(key)));
 }
 
-void grdbg_out_string(GRDBG_Out * out, const char * text) {
-  STEP(out, gtext_json_writer_string(out->writer, text, strlen(text)));
+/* The length of the well-formed UTF-8 sequence at `s` (of `n` bytes left), or
+ * zero if what is there is not one: a stray continuation byte, an overlong
+ * form, a surrogate, a code point past U+10FFFF, or a sequence cut short. */
+static size_t utf8_sequence(const unsigned char * s, size_t n) {
+  if (s[0] < 0x80) {
+    return 1;
+  }
+  size_t want;
+  uint32_t code;
+  uint32_t least;
+  if (s[0] >= 0xC2 && s[0] <= 0xDF) {
+    want = 2;
+    code = s[0] & 0x1Fu;
+    least = 0x80;
+  } else if (s[0] >= 0xE0 && s[0] <= 0xEF) {
+    want = 3;
+    code = s[0] & 0x0Fu;
+    least = 0x800;
+  } else if (s[0] >= 0xF0 && s[0] <= 0xF4) {
+    want = 4;
+    code = s[0] & 0x07u;
+    least = 0x10000;
+  } else {
+    return 0;
+  }
+  if (n < want) {
+    return 0;
+  }
+  for (size_t i = 1; i < want; i++) {
+    if ((s[i] & 0xC0u) != 0x80u) {
+      return 0;
+    }
+    code = (code << 6) | (s[i] & 0x3Fu);
+  }
+  if (code < least || code > 0x10FFFFu || (code >= 0xD800u && code <= 0xDFFFu)) {
+    return 0;
+  }
+  return want;
 }
 
+/* A string from the engine can hold any bytes: a file name or an inspected
+ * value is the engine's to choose, and JSON cannot carry what is not UTF-8. The
+ * writer refuses it, which would turn a whole response into an error over one
+ * name. So the bytes that are not UTF-8 go out as U+FFFD, and the rest as they
+ * are. */
 void grdbg_out_string_n(GRDBG_Out * out, const char * text, size_t length) {
-  STEP(out, gtext_json_writer_string(out->writer, text, length));
+  const unsigned char * s = (const unsigned char *)text;
+  size_t bad = 0;
+  for (size_t i = 0; i < length;) {
+    size_t n = utf8_sequence(s + i, length - i);
+    if (n == 0) {
+      bad++;
+      i++;
+    } else {
+      i += n;
+    }
+  }
+  if (bad == 0) {
+    STEP(out, gtext_json_writer_string(out->writer, text, length));
+    return;
+  }
+  if (out->failed) {
+    return;
+  }
+  char * clean = out->buf.allocator->malloc_fn(
+      out->buf.allocator->ctx, length + bad * 2 + 1);
+  if (clean == NULL) {
+    out->failed = true;
+    return;
+  }
+  size_t used = 0;
+  for (size_t i = 0; i < length;) {
+    size_t n = utf8_sequence(s + i, length - i);
+    if (n == 0) {
+      memcpy(clean + used, "\xEF\xBF\xBD", 3);
+      used += 3;
+      i++;
+    } else {
+      memcpy(clean + used, s + i, n);
+      used += n;
+      i += n;
+    }
+  }
+  STEP(out, gtext_json_writer_string(out->writer, clean, used));
+  out->buf.allocator->free_fn(out->buf.allocator->ctx, clean);
+}
+
+void grdbg_out_string(GRDBG_Out * out, const char * text) {
+  grdbg_out_string_n(out, text, strlen(text));
 }
 
 void grdbg_out_int(GRDBG_Out * out, int64_t value) {
