@@ -1,0 +1,7 @@
+?Content-Length: 96
+
+{"seq":1,"type":"request","command":"setBreakpoints","arguments":{"source":5,"breakpoints":"x"}}Content-Length: 94
+
+{"seq":2,"type":"request","command":"stackTrace","arguments":{"startFrame":-1,"levels":"all"}}Content-Length: 98
+
+{"seq":3,"type":"request","command":"variables","arguments":{"variablesReference":1.5,"start":-3}}

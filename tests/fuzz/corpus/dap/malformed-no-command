@@ -1,0 +1,7 @@
+?Content-Length: 26
+
+{"seq":1,"type":"request"}Content-Length: 38
+
+{"seq":2,"type":"request","command":7}Content-Length: 47
+
+{"seq":3,"type":"response","command":"threads"}

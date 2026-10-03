@@ -1,0 +1,7 @@
+Name: Ghoti.io Runtime-debug(BRANCH)
+Description: The language runtime stack's debugger: one debug model of breakpoints, stepping and the state of a stop, and a Debug Adapter Protocol adapter over a transport the host binds.
+Version: (VERSION)
+URL: https://github.com/Ghoti-io/runtime-debug
+Libs: -L(PC_LIB_DIR) -l(SUITE)-(PROJECT)(BRANCH) -pthread
+CFlags: -I(PC_INCLUDE_DIR)
+Requires: (REQUIRES)

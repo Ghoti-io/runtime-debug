@@ -1,0 +1,9 @@
+?Content-Length: 47
+
+{"seq":1,"type":"request","command":"nonsense"}Content-Length: 46
+
+{"seq":2,"type":"request","command":"restart"}Content-Length: 86
+
+{"seq":3,"type":"request","command":"variables","arguments":{"variablesReference":99}}Content-Length: 72
+
+{"seq":4,"type":"request","command":"scopes","arguments":{"frameId":-1}}
