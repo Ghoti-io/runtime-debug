@@ -96,7 +96,8 @@ else ifeq ($(UNAME_S), Darwin)
 
 # TODO(windows): the Windows branches in this file were adapted from font's
 # and have never been run, nor has GRDBG_API's dllexport/dllimport switching.
-# See notes/suite/WINDOWS-TODO.md.
+# (Windows work is not yet done for this library: the unit tests and example
+# use POSIX sockets, and the descriptor transport is unsupported there.)
 else ifeq ($(findstring MINGW32_NT,$(UNAME_S)),MINGW32_NT)
 	OS_NAME := Windows
 	LIB_EXTENSION := dll

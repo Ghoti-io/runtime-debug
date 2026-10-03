@@ -266,24 +266,36 @@ static GRDBG_Result value_text(GRDBG_Debugger * d, const GRCORE_AbstractFrame * 
     *out = copy;
     return GRDBG_OK;
   }
-  size_t keep = length < VALUE_TEXT_MAX ? length : VALUE_TEXT_MAX;
-  char * big = grdbg_alloc(d, length + 1);
+  /* Ask for no more than will be shown, and four bytes past it, so that the
+   * cut can see whether it falls inside a UTF-8 sequence. */
+  size_t shown = length < VALUE_TEXT_MAX ? length : VALUE_TEXT_MAX;
+  size_t room = shown + 5;
+  char * big = grdbg_alloc(d, room);
   if (big == NULL) {
     return GRDBG_ERR_OOM;
   }
   size_t again = 0;
   GRDBG_Result r = GRDBG_OK;
   if (grcore_engine_inspect(d->context, f->engine, v->kind, v->value, big,
-          length + 1, &again) != GRCORE_OK) {
+          room, &again) != GRCORE_OK) {
     r = GRDBG_ERR_INVALID;
   } else {
-    if (again < keep) {
-      keep = again;
+    size_t have = again < room - 1 ? again : room - 1;
+    size_t keep = have < shown ? have : shown;
+    bool cut = again > keep;
+    if (cut) {
+      while (keep > 0 && ((unsigned char)big[keep] & 0xC0u) == 0x80u) {
+        keep--; /* not inside a sequence */
+      }
     }
-    char * copy = grdbg_arena_string(d, big, keep);
+    static const char mark[] = "\xE2\x80\xA6"; /* an ellipsis says it was cut */
+    char * copy = grdbg_arena_string(d, big, keep + (cut ? sizeof mark - 1 : 0));
     if (copy == NULL) {
       r = GRDBG_ERR_OOM;
     } else {
+      if (cut) {
+        memcpy(copy + keep, mark, sizeof mark - 1);
+      }
       *out = copy;
     }
   }

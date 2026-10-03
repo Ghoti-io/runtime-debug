@@ -85,6 +85,8 @@ struct GRDBG_Dap {
   size_t ref_count;
   size_t ref_capacity;
   uint64_t generation; ///< The model's, when the refs were issued.
+  uint64_t frame_base;  ///< Frame ids spent by earlier stops.
+  size_t frame_span;    ///< Frames this stop has issued ids for.
 
   /* Session state. */
   bool closed;           ///< The client left (disconnect, end of input).

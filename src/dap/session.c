@@ -46,7 +46,8 @@ GRDBG_Result grdbg_dap_create(GRDBG_Debugger * debugger,
     const GRDBG_Transport * transport, const GRDBG_Limits * limits,
     GRDBG_Dap ** out_dap) {
   if (debugger == NULL || transport == NULL || out_dap == NULL ||
-      transport->read == NULL || transport->write == NULL) {
+      transport->read == NULL || transport->write == NULL ||
+      !grcore_context_is_owner(grdbg_debugger_context(debugger))) {
     return GRDBG_ERR_INVALID;
   }
   const GRDBG_Allocator * allocator = grdbg_debugger_allocator(debugger);
@@ -60,7 +61,6 @@ GRDBG_Result grdbg_dap_create(GRDBG_Debugger * debugger,
   grdbg_limits_resolve(limits, &dap->limits);
   dap->lines_from_1 = true;
   dap->columns_from_1 = true;
-  dap->generation = grdbg_debugger_generation(debugger);
   *out_dap = dap;
   return GRDBG_OK;
 }
@@ -124,6 +124,9 @@ GRDBG_Result grdbg_dap_serve(GRDBG_Dap * dap, GRDBG_ServeResult * out_result) {
     }
     r = grdbg_dap_handle(dap, root);
     grdbg_dap_free_json(root);
+    if (r == GRDBG_ERR_OOM && dap->proceed != 0) {
+      r = GRDBG_OK; /* the model has moved on, so the host must; the response is lost */
+    }
     if (r == GRDBG_ERR_OOM) {
       return r;
     }

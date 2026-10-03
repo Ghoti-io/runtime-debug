@@ -194,10 +194,10 @@ budget is refused where it would have been misread, and a test does exactly
 that.
 
 The adapter keeps its `variablesReference`s only while the model's generation
-number is the one they were issued under. Frame ids are the frame index plus
-one, so a client that reuses an id across stops gets the new stop's frame and
-not an error; that is how the protocol defines an id, valid only until the
-program runs.
+number is the one they were issued under. Frame ids are numbered from 1 and
+never reused: when the generation moves, the next stop's ids start above every
+id the last could have issued. A frame id or reference from before a resume is
+therefore unknown, an error response, and never another stop's frame.
 
 ## Reading is allowed only where AD-20 says
 

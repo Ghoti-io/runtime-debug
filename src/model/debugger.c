@@ -87,12 +87,14 @@ typedef struct {
   const char * file;
   int line;
   size_t depth;
+  bool valid; ///< The stack was read and has a frame.
 } Place;
 
 static void read_place(GRCORE_Context * context, bool want_depth, Place * out) {
   out->file = NULL;
   out->line = 0;
   out->depth = 0;
+  out->valid = false;
   GRCORE_FrameWalk walk;
   if (grcore_frame_walk_begin(context, &walk) != GRCORE_OK) {
     return;
@@ -104,6 +106,7 @@ static void read_place(GRCORE_Context * context, bool want_depth, Place * out) {
   out->file = frame.location.file;
   out->line = frame.location.line;
   out->depth = 1;
+  out->valid = true;
   if (want_depth) {
     while (grcore_frame_walk_next(&walk, &frame)) {
       out->depth++;
@@ -175,7 +178,10 @@ static void yield_poll(
   if (hits > 0) {
     reason = GRDBG_STOP_BREAKPOINT; /* a breakpoint wins over a step */
     d->step = GRDBG_STEP_NONE;
-  } else if (d->step != GRDBG_STEP_NONE && step_satisfied(d, &place)) {
+  } else if (d->step != GRDBG_STEP_NONE && place.valid &&
+      step_satisfied(d, &place)) {
+    /* A place that could not be read is not evaluated: depth zero would
+     * satisfy an over or an out that nothing has finished. */
     reason = GRDBG_STOP_STEP;
     d->step = GRDBG_STEP_NONE;
   } else if (d->pause_requested) {

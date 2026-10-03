@@ -55,9 +55,9 @@ dap::Script session_script() {
       .request("evaluate", R"({"expression":"x + 1","frameId":1,"context":"repl"})")
       .request("stepIn", R"({"threadId":1})")
       .request("stackTrace", R"({"threadId":1})")
-      .request("scopes", R"({"frameId":1})")
-      .request("variables", R"({"variablesReference":1})")
       .request("scopes", R"({"frameId":2})")
+      .request("variables", R"({"variablesReference":1})")
+      .request("scopes", R"({"frameId":3})")
       .request("variables", R"({"variablesReference":3})")
       .request("next", R"({"threadId":1})")
       .request("stackTrace", R"({"threadId":1,"levels":1})")
@@ -260,8 +260,10 @@ TEST(DapSession, TheTranscriptSaysWhatTheTaskAsksOf) {
   EXPECT_EQ(traces[0]->num("body.totalFrames"), 1);
   EXPECT_EQ(traces[1]->num("body.stackFrames.0.line"), 10);  // stepped in
   EXPECT_EQ(traces[1]->num("body.stackFrames.1.line"), 2);
-  EXPECT_EQ(traces[1]->num("body.stackFrames.0.id"), 1);
-  EXPECT_EQ(traces[1]->num("body.stackFrames.1.id"), 2);
+  // Ids are numbered from 1 and never reused: the first stop spent id 1.
+  EXPECT_EQ(traces[0]->num("body.stackFrames.0.id"), 1);
+  EXPECT_EQ(traces[1]->num("body.stackFrames.0.id"), 2);
+  EXPECT_EQ(traces[1]->num("body.stackFrames.1.id"), 3);
   EXPECT_EQ(traces[1]->num("body.totalFrames"), 2);
   EXPECT_EQ(traces[2]->size("body.stackFrames"), 1u);  // levels: 1
   EXPECT_EQ(traces[2]->num("body.totalFrames"), 2);

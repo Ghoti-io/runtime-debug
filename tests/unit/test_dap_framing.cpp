@@ -261,6 +261,37 @@ TEST(Framing, ACreateNeedsAReadAndAWrite) {
   EXPECT_EQ(grdbg_dap_create(w.dbg, &t, nullptr, nullptr), GRDBG_ERR_INVALID);
 }
 
+TEST(Framing, TinyAndHugeLimitsAreClampedToBoundsThatWork) {
+  GRDBG_Limits tiny;
+  grdbg_limits_default(&tiny);
+  tiny.max_header_bytes = 1;  // could not hold any header at all
+  Fixture f(request(1, "threads") + request(2, "disconnect"), 4096, basic_program(), &tiny);
+  GRDBG_ServeResult r;
+  ASSERT_EQ(f.serve(&r), GRDBG_OK);
+  EXPECT_EQ(f.out().size(), 2u);
+
+  GRDBG_Limits huge;
+  grdbg_limits_default(&huge);
+  huge.max_message_bytes = SIZE_MAX;  // header plus body would wrap
+  huge.max_header_bytes = SIZE_MAX;
+  Fixture g("Content-Length: 4000000000\r\n\r\n" + std::string(100, 'x'), 4096, basic_program(), &huge);
+  EXPECT_EQ(g.serve(&r), GRDBG_ERR_LIMIT);
+  Fixture h("Content-Length: " + std::to_string(SIZE_MAX) + "\r\n\r\n", 4096, basic_program(), &huge);
+  EXPECT_EQ(h.serve(&r), GRDBG_ERR_LIMIT);
+}
+
+TEST(Framing, ACreateFromANonOwnerThreadIsRefused) {
+  ToyWorld w(basic_program());
+  ASSERT_EQ(w.attach(), GRDBG_OK);
+  dap::Wire wire;
+  GRDBG_Transport t = wire.transport();
+  GRDBG_Result r = GRDBG_OK;
+  GRDBG_Dap * session = reinterpret_cast<GRDBG_Dap *>(0x1);
+  std::thread([&] { r = grdbg_dap_create(w.dbg, &t, nullptr, &session); }).join();
+  EXPECT_EQ(r, GRDBG_ERR_INVALID);
+  EXPECT_EQ(session, reinterpret_cast<GRDBG_Dap *>(0x1));
+}
+
 TEST(Framing, ANonOwnerThreadIsRefused) {
   Fixture f(request(1, "threads"));
   GRDBG_Result r = GRDBG_OK;
@@ -681,6 +712,26 @@ TEST(Ids, AReferenceFromBeforeAResumeIsForgotten) {
   EXPECT_TRUE(all[2].success());
   EXPECT_FALSE(all[3].success());
   EXPECT_EQ(all[3].message(), "unknown variablesReference");
+}
+
+TEST(Ids, AFrameIdFromBeforeAResumeIsUnknownAndTheNewStopsIdsAreNew) {
+  Fixture f(request(1, "stackTrace") + request(2, "scopes", R"({"frameId":1})") + request(3, "continue") +
+      request(4, "stackTrace") + request(5, "scopes", R"({"frameId":1})") + request(6, "scopes", R"({"frameId":2})") +
+      request(7, "evaluate", R"({"expression":"x","frameId":1})") + request(8, "disconnect"));
+  f.stop_at(3);
+  GRDBG_ServeResult r;
+  ASSERT_EQ(f.serve(&r), GRDBG_OK);
+  EXPECT_EQ(r, GRDBG_SERVE_RESUME);
+  ASSERT_EQ(f.serve(&r), GRDBG_OK);  // (the program was not resumed, so it is still stopped)
+  std::vector<dap::Msg> all = f.out();
+  EXPECT_EQ(all[0].num("body.stackFrames.0.id"), 1);
+  EXPECT_TRUE(all[1].success());
+  EXPECT_EQ(all[3].num("body.stackFrames.0.id"), 2);  // not 1 again
+  EXPECT_FALSE(all[4].success());
+  EXPECT_EQ(all[4].message(), "unknown frame id");
+  EXPECT_TRUE(all[5].success());
+  EXPECT_FALSE(all[6].success());
+  EXPECT_EQ(all[6].message(), "unknown frame id");
 }
 
 TEST(Ids, ScopesForTheSameFrameKeepTheirReferenceWithinAStop) {

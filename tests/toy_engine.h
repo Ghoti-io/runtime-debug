@@ -217,7 +217,19 @@ inline GRCORE_Location locate(const GRCORE_Context * context, uint64_t function,
   return GRCORE_Location{f.file.c_str(), f.code[offset].line};
 }
 
+constexpr uint64_t kLongValue = 0xDEADBEEF;  // inspects as 3000 euro signs (9000 bytes)
+
 inline size_t inspect(const GRCORE_Context *, GRCORE_SlotKind kind, uint64_t value, char * buffer, size_t size) {
+  if (kind == GRCORE_SLOT_VALUE && value == kLongValue) {
+    std::string text;
+    for (int i = 0; i < 3000; ++i) {
+      text += "\xe2\x82\xac";
+    }
+    if (size > 0) {
+      std::snprintf(buffer, size, "%s", text.c_str());
+    }
+    return text.size();
+  }
   int n = kind == GRCORE_SLOT_VALUE
       ? std::snprintf(buffer, size, "%lld", static_cast<long long>(static_cast<int64_t>(value)))
       : std::snprintf(buffer, size, "0x%llx", static_cast<unsigned long long>(value));

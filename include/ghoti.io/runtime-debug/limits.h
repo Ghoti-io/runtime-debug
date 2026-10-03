@@ -46,6 +46,10 @@ extern "C" {
  * @brief The caps. A field of zero means that field's default, and a `NULL`
  *   `GRDBG_Limits *` anywhere in this library means all defaults.
  *
+ * `max_header_bytes` is held between 32 bytes and 64 KiB (a header block must
+ * hold a `Content-Length`) and `max_message_bytes` between 1 byte and 1 GiB (a
+ * cap past that is none, and could not be added to a header without wrapping).
+ *
  * A cap that is exceeded is reported, never worked around by truncating: a
  * breakpoint set past `max_breakpoints` is ::GRDBG_ERR_LIMIT and changes
  * nothing, and a framing cap ends the session with ::GRDBG_ERR_LIMIT. The one

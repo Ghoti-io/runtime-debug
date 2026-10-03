@@ -118,12 +118,24 @@ static int64_t client_column(const GRDBG_Dap * dap) {
 
 /* ---- ids ---------------------------------------------------------------- */
 
-/* Forgets the variablesReferences when the model says what they named is gone. */
-static void sync_refs(GRDBG_Dap * dap) {
+/* Forgets what the model says is gone. When the generation has moved, the
+ * variablesReferences are forgotten, and the frame ids move on: ids are numbered
+ * from 1 and never reused, so the stop that follows starts above every id the
+ * earlier one could have issued, and a stale id is unknown, not a wrong frame.
+ * `available` is how many frames this stop has, which the ids it issues span. */
+static void sync_ids(GRDBG_Dap * dap, size_t available) {
   uint64_t now = grdbg_debugger_generation(dap->debugger);
   if (now != dap->generation) {
+    /* (The first stop spends nothing: ids start at 1.) */
+    if (dap->generation != 0) {
+      dap->frame_base += dap->frame_span > 0 ? dap->frame_span : 1;
+    }
     dap->ref_count = 0;
     dap->generation = now;
+    dap->frame_span = 0;
+  }
+  if (available > dap->frame_span) {
+    dap->frame_span = available;
   }
 }
 
@@ -181,11 +193,13 @@ static GRDBG_Result frame_arg(GRDBG_Dap * dap, const GRDBG_Request * rq,
     *out_index = 0;
     return GRDBG_OK;
   }
-  if (have != 1 || id < 1 || (uint64_t)id > available) {
+  sync_ids(dap, available);
+  if (have != 1 || id < 1 || (uint64_t)id <= dap->frame_base ||
+      (uint64_t)id - dap->frame_base > available) {
     *out_replied = true;
     return grdbg_response_error(dap, rq, "unknown frame id");
   }
-  *out_index = (size_t)id - 1;
+  *out_index = (size_t)((uint64_t)id - dap->frame_base) - 1;
   return GRDBG_OK;
 }
 
@@ -361,6 +375,7 @@ static GRDBG_Result do_stack_trace(GRDBG_Dap * dap, const GRDBG_Request * rq) {
   if (grdbg_debugger_frames(dap->debugger, &total, &available) != GRDBG_OK) {
     return not_stopped(dap, rq);
   }
+  sync_ids(dap, available);
   int64_t start = 0, levels = 0;
   if (arg_int(rq, "startFrame", &start) == -1 || start < 0 ||
       arg_int(rq, "levels", &levels) == -1 || levels < 0) {
@@ -390,7 +405,7 @@ static GRDBG_Result do_stack_trace(GRDBG_Dap * dap, const GRDBG_Request * rq) {
     }
     grdbg_out_obj_begin(&out);
     grdbg_out_key(&out, "id");
-    grdbg_out_int(&out, (int64_t)i + 1);
+    grdbg_out_int(&out, (int64_t)(dap->frame_base + i + 1));
     grdbg_out_key(&out, "name");
     grdbg_out_string(&out, frame.name);
     if (frame.file != NULL) {
@@ -433,7 +448,6 @@ static GRDBG_Result do_scopes(GRDBG_Dap * dap, const GRDBG_Request * rq) {
   if (replied || r != GRDBG_OK) {
     return r;
   }
-  sync_refs(dap);
   size_t count;
   if (grdbg_debugger_scope_count(dap->debugger, frame, &count) != GRDBG_OK) {
     return grdbg_response_error(dap, rq, "the frame could not be read");
@@ -482,7 +496,12 @@ static GRDBG_Result do_variables(GRDBG_Dap * dap, const GRDBG_Request * rq) {
   if (!stopped(dap)) {
     return not_stopped(dap, rq);
   }
-  sync_refs(dap);
+  {
+    size_t total, available;
+    if (grdbg_debugger_frames(dap->debugger, &total, &available) == GRDBG_OK) {
+      sync_ids(dap, available);
+    }
+  }
   int64_t ref = 0, start = 0, count = 0;
   if (arg_int(rq, "variablesReference", &ref) != 1 || ref < 1 ||
       (uint64_t)ref > dap->ref_count) {
@@ -585,6 +604,9 @@ static GRDBG_Result do_continue(GRDBG_Dap * dap, const GRDBG_Request * rq) {
   if (grdbg_debugger_continue(dap->debugger) != GRDBG_OK) {
     return grdbg_response_error(dap, rq, "the program could not be continued");
   }
+  /* The model is already resumed, so the host must be told to resume whether
+   * or not the response gets out. */
+  dap->proceed = (int)GRDBG_SERVE_RESUME + 1;
   GRDBG_Out out;
   GRDBG_Result r = grdbg_response_begin(dap, rq, true, &out);
   if (r != GRDBG_OK) {
@@ -592,11 +614,7 @@ static GRDBG_Result do_continue(GRDBG_Dap * dap, const GRDBG_Request * rq) {
   }
   grdbg_out_key(&out, "allThreadsContinued");
   grdbg_out_bool(&out, true);
-  r = grdbg_response_end(dap, rq, &out);
-  if (r == GRDBG_OK) {
-    dap->proceed = (int)GRDBG_SERVE_RESUME + 1;
-  }
-  return r;
+  return grdbg_response_end(dap, rq, &out);
 }
 
 static GRDBG_Result do_step(
@@ -611,11 +629,8 @@ static GRDBG_Result do_step(
   if (s != GRDBG_OK) {
     return grdbg_response_error(dap, rq, "the step could not be started");
   }
-  GRDBG_Result r = grdbg_response_ok(dap, rq);
-  if (r == GRDBG_OK) {
-    dap->proceed = (int)GRDBG_SERVE_RESUME + 1;
-  }
-  return r;
+  dap->proceed = (int)GRDBG_SERVE_RESUME + 1; /* the step is armed: see do_continue */
+  return grdbg_response_ok(dap, rq);
 }
 
 static GRDBG_Result do_next(GRDBG_Dap * dap, const GRDBG_Request * rq) {

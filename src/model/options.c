@@ -48,6 +48,17 @@ void grdbg_limits_default(GRDBG_Limits * limits) {
   limits->max_variables = GRDBG_DEFAULT_VARIABLES;
 }
 
+/* Sane bounds. A header block must hold "Content-Length: N" and its terminator,
+ * and a message so large that header and body cannot be added without wrapping
+ * (or held in memory at all) is not a cap, it is the absence of one. */
+#define GRDBG_HEADER_FLOOR 32u
+#define GRDBG_HEADER_CEILING (64u * 1024u)
+#define GRDBG_MESSAGE_CEILING (1u << 30)
+
+static size_t clamp(size_t value, size_t low, size_t high) {
+  return value < low ? low : value > high ? high : value;
+}
+
 void grdbg_limits_resolve(const GRDBG_Limits * in, GRDBG_Limits * out) {
   grdbg_limits_default(out);
   if (in == NULL) {
@@ -59,6 +70,9 @@ void grdbg_limits_resolve(const GRDBG_Limits * in, GRDBG_Limits * out) {
   if (in->max_message_bytes != 0) {
     out->max_message_bytes = in->max_message_bytes;
   }
+  out->max_header_bytes = clamp(
+      out->max_header_bytes, GRDBG_HEADER_FLOOR, GRDBG_HEADER_CEILING);
+  out->max_message_bytes = clamp(out->max_message_bytes, 1, GRDBG_MESSAGE_CEILING);
   if (in->max_json_depth != 0) {
     out->max_json_depth = in->max_json_depth;
   }

@@ -211,6 +211,50 @@ TEST(AllocFail, AStackTraceResponseIsAnAnswerOrOomAndTheSessionGoesOn) {
   EXPECT_GE(failures, 10);
 }
 
+TEST(AllocFail, ANonUtf8NameInAStackTraceIsOomOrWhole) {
+  // The sanitiser copies a name that is not UTF-8; that allocation is failed too.
+  const std::string odd = "b\xff.toy";
+  auto odd_program = [&] {
+    toy::Program p;
+    p.fn("main", odd, {"x"}).set(1, "x", 3).nop(2);
+    return p;
+  };
+  int failures = sweep([&](long n) {
+    ToyWorld w(odd_program());
+    EXPECT_EQ(w.attach(), GRDBG_OK);
+    dap::Script script;
+    script.request("stackTrace");
+    dap::Wire wire;
+    wire.input = script.bytes();
+    GRDBG_Transport t = wire.transport();
+    GRDBG_Dap * s;
+    EXPECT_EQ(grdbg_dap_create(w.dbg, &t, nullptr, &s), GRDBG_OK);
+    int line = 2;
+    uint64_t id;
+    EXPECT_EQ(grdbg_debugger_set_breakpoints(w.dbg, odd.c_str(), &line, 1, &id), GRDBG_OK);
+    w.run_to_pause();
+    w.debug_allocator.calls = 0;
+    w.debug_allocator.fail_at = n;
+    GRDBG_ServeResult r;
+    GRDBG_Result result = grdbg_dap_serve(s, &r);
+    bool reached = w.debug_allocator.calls >= n;
+    w.debug_allocator.fail_at = 0;
+    std::string leftover;
+    std::vector<std::string> bodies = dap::split(wire.output, &leftover);
+    EXPECT_EQ(leftover, "");
+    EXPECT_TRUE(result == GRDBG_OK || result == GRDBG_ERR_OOM || result == GRDBG_ERR_FORMAT);
+    for (const std::string & b : bodies) {
+      dap::Msg m(b);
+      if (m.is_response() && m.success()) {
+        EXPECT_EQ(m.str("body.stackFrames.0.source.path"), "b\xef\xbf\xbd.toy");
+      }
+    }
+    grdbg_dap_destroy(s);
+    return reached;
+  });
+  EXPECT_GE(failures, 8);
+}
+
 TEST(AllocFail, TheStopEventAndTheFinishedEventsAreOomOrWhole) {
   int failures = sweep([&](long n) {
     ToyWorld w(program());

@@ -80,8 +80,10 @@ typedef struct GRDBG_Transport {
  * descriptor twice. A partial `write(2)` is continued and `EINTR` retried. On
  * a socket the library sends with `MSG_NOSIGNAL`, so a client that went away
  * is ::GRDBG_ERR_IO and not a `SIGPIPE`; on a pipe the host's signal
- * disposition applies. The descriptors stay the host's: nothing here opens,
- * closes or changes them.
+ * disposition applies, so a host that wants an error there ignores `SIGPIPE`.
+ * The descriptors must be blocking: a read or write that would block
+ * (`EAGAIN`) is ::GRDBG_ERR_IO and ends the session. The descriptors stay the
+ * host's: nothing here opens, closes or changes them.
  *
  * @param in_fd Where requests are read from.
  * @param out_fd Where responses and events are written to.

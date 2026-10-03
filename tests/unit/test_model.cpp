@@ -528,6 +528,27 @@ TEST(Snapshot, ScopesAndVariablesAreReadThroughTheDescriptorPerFrame) {
   EXPECT_EQ(n, 5u);
 }
 
+TEST(Snapshot, AValueLongerThanTheDisplayCapIsCutOutsideAUtf8SequenceAndMarked) {
+  toy::Program p;
+  p.fn("main", "a.toy", {"big", "small"}).set(1, "big", static_cast<int64_t>(toy::kLongValue)).set(2, "small", 7).nop(3);
+  ToyWorld w(std::move(p));
+  ASSERT_EQ(w.attach(), GRDBG_OK);
+  int line = 3;
+  uint64_t id;
+  ASSERT_EQ(grdbg_debugger_set_breakpoints(w.dbg, "a.toy", &line, 1, &id), GRDBG_OK);
+  w.run_to_pause();
+  GRDBG_Variable v;
+  ASSERT_EQ(grdbg_debugger_variable(w.dbg, 0, 0, 0, &v), GRDBG_OK);
+  std::string text = v.text;
+  // 9,000 bytes of three-byte characters, cut at 8,192: 8,190 is the last whole
+  // character, and an ellipsis (three bytes) says it was cut.
+  EXPECT_EQ(text.size(), 8190u + 3u);
+  EXPECT_EQ(text.substr(8190), "\xe2\x80\xa6");
+  EXPECT_EQ(text.substr(0, 3), "\xe2\x82\xac");
+  ASSERT_EQ(grdbg_debugger_variable(w.dbg, 0, 0, 1, &v), GRDBG_OK);
+  EXPECT_STREQ(v.text, "7");  // and a short one is untouched
+}
+
 TEST(Snapshot, AVariableCanBeFoundByNameInnermostScopeFirst) {
   ToyWorld w(three_deep());
   ASSERT_EQ(w.attach(), GRDBG_OK);

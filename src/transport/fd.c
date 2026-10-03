@@ -26,7 +26,9 @@
  * The library never listens, binds or accepts: the host opens whatever it
  * likes and hands over the descriptors. A socket is written with
  * `MSG_NOSIGNAL`, so a client that went away is an error return and not a
- * signal; the library changes no signal disposition of the host's.
+ * signal; the library changes no signal disposition of the host's, so on a pipe
+ * `SIGPIPE` is the host's policy. The descriptors must be blocking: `EAGAIN` is
+ * an error return (`GRDBG_ERR_IO`).
  */
 
 /* S_ISSOCK, MSG_NOSIGNAL and read/write are POSIX, and -std=c17 hides them. */
@@ -120,9 +122,10 @@ GRDBG_Result grdbg_transport_create_fd(int in_fd, int out_fd,
 
 #else /* _WIN32 */
 
-/* TODO(windows): descriptors are a POSIX idea here; a Windows host binds its
- * own handles through a GRDBG_Transport of its own. See
- * notes/suite/WINDOWS-TODO.md. */
+/* TODO(windows): descriptors are a POSIX idea here, and this branch has never
+ * been compiled or run. A Windows host binds its own handles through a
+ * GRDBG_Transport of its own; verifying this branch means a Windows
+ * transport over sockets or pipes whose tests pass on a Windows machine. */
 GRDBG_Result grdbg_transport_create_fd(int in_fd, int out_fd,
     const GRDBG_Allocator * allocator, GRDBG_Transport ** out_transport) {
   (void)in_fd;
