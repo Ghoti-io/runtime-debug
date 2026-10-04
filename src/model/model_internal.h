@@ -142,6 +142,21 @@ void * grdbg_alloc(GRDBG_Debugger * debugger, size_t size);
 /** @brief Frees what ::grdbg_alloc returned. */
 void grdbg_free(GRDBG_Debugger * debugger, void * pointer);
 
+/** @brief Where the stop's arena stood, to give back what a request took. */
+typedef struct GRDBG_ArenaMark {
+  const GRDBG_Chunk * chunk; ///< The head chunk then, or NULL for an empty arena.
+  size_t used;               ///< Its fill then.
+} GRDBG_ArenaMark;
+
+/** @brief Notes the arena's present end. */
+GRDBG_ArenaMark grdbg_arena_mark(const GRDBG_Debugger * debugger);
+
+/** @brief Gives back everything the arena took since `mark`: strings handed
+ *   out since then are no longer valid. The strings of a request are copied
+ *   into the response before this is called, so a session that repeats a
+ *   read does not keep every copy until the next resume. */
+void grdbg_arena_release(GRDBG_Debugger * debugger, GRDBG_ArenaMark mark);
+
 /** @brief Copies `length` bytes and a terminator into the stop's arena. */
 char * grdbg_arena_string(
     GRDBG_Debugger * debugger, const char * text, size_t length);

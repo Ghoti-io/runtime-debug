@@ -86,6 +86,64 @@ static GRDBG_Result fail(GRDBG_Dap * dap, GRDBG_Result why) {
   return why;
 }
 
+/* The seq and the command of a request that could not be parsed, read off the
+ * text: the first "seq" key followed by an integer, and the first "command"
+ * key followed by a string with no escape in it. Anything else leaves the
+ * defaults (seq 0, no command). */
+static const char * find_key(const char * body, size_t length, const char * key) {
+  size_t n = strlen(key);
+  for (size_t i = 0; i + n + 2 < length; i++) {
+    if (body[i] == '"' && memcmp(body + i + 1, key, n) == 0 && body[i + 1 + n] == '"') {
+      size_t j = i + n + 2;
+      while (j < length && (body[j] == ' ' || body[j] == '\t')) {
+        j++;
+      }
+      if (j < length && body[j] == ':') {
+        j++;
+        while (j < length && (body[j] == ' ' || body[j] == '\t')) {
+          j++;
+        }
+        return body + j;
+      }
+    }
+  }
+  return NULL;
+}
+
+static void scan_request(const char * body, size_t length, int64_t * seq,
+    const char ** command, size_t * command_length) {
+  const char * at = find_key(body, length, "seq");
+  if (at != NULL) {
+    const char * end = body + length;
+    bool negative = at < end && *at == '-';
+    if (negative) {
+      at++;
+    }
+    int64_t value = 0;
+    int digits = 0;
+    while (at < end && *at >= '0' && *at <= '9' && digits < 18) {
+      value = value * 10 + (*at - '0');
+      at++;
+      digits++;
+    }
+    if (digits > 0) {
+      *seq = negative ? -value : value;
+    }
+  }
+  at = find_key(body, length, "command");
+  if (at != NULL && at < body + length && *at == '"') {
+    const char * start = at + 1;
+    const char * end = start;
+    while (end < body + length && *end != '"' && *end != '\\') {
+      end++;
+    }
+    if (end < body + length && *end == '"') {
+      *command = start;
+      *command_length = (size_t)(end - start);
+    }
+  }
+}
+
 GRDBG_Result grdbg_dap_serve(GRDBG_Dap * dap, GRDBG_ServeResult * out_result) {
   if (dap == NULL || out_result == NULL ||
       !grcore_context_is_owner(grdbg_debugger_context(dap->debugger))) {
@@ -118,7 +176,16 @@ GRDBG_Result grdbg_dap_serve(GRDBG_Dap * dap, GRDBG_ServeResult * out_result) {
     GTEXT_JSON_Value * root = grdbg_dap_parse(dap, body, length, &out_of_memory);
     if (root == NULL) {
       if (out_of_memory) {
-        return GRDBG_ERR_OOM; /* the request is lost; the session goes on */
+        /* The request is lost and the session goes on, but its client is
+         * waiting for an answer, so it gets one: the message could not be
+         * parsed, so its seq and command are read off the text as plainly as
+         * can be done, and the answer is built without allocating. */
+        int64_t seq = 0;
+        const char * command = "";
+        size_t command_length = 0;
+        scan_request(body, length, &seq, &command, &command_length);
+        (void)grdbg_response_oom(dap, seq, command, command_length);
+        return GRDBG_ERR_OOM;
       }
       continue; /* well framed, but not JSON: nothing to answer to */
     }

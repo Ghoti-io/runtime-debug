@@ -150,6 +150,14 @@ GRDBG_Result grdbg_response_end(
 /** @brief Sends `success:false` with a message. */
 GRDBG_Result grdbg_response_error(GRDBG_Dap * dap,
     const GRDBG_Request * request, const char * message);
+/** @brief Answers a request with `success:false, "out of memory"` without
+ *   allocating, from a buffer on the stack: what is sent when the allocation
+ *   that would have built the answer is the one that failed. `command` is
+ *   named only if it is made of letters, digits and underscores. A failed
+ *   write is the result; success is ::GRDBG_OK, not the out-of-memory the
+ *   caller is already reporting. */
+GRDBG_Result grdbg_response_oom(GRDBG_Dap * dap, int64_t request_seq,
+    const char * command, size_t command_length);
 /** @brief Sends `success:true` with no body. */
 GRDBG_Result grdbg_response_ok(
     GRDBG_Dap * dap, const GRDBG_Request * request);

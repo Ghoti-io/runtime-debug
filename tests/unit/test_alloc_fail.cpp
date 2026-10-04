@@ -284,4 +284,110 @@ TEST(AllocFail, TheStopEventAndTheFinishedEventsAreOomOrWhole) {
   EXPECT_GE(failures, 3);
 }
 
+TEST(AllocFail, EveryRequestIsAnsweredEvenWhenTheAnswerCouldNotBeBuilt) {
+  // Four requests, one at a time as a client that waits for each sends them.
+  // Whichever allocation fails, serve may report out of memory, and the client
+  // still hears exactly one answer to every request it sent: the one that
+  // lost its memory gets "out of memory" built without any. The same
+  // allocation failing while the model reads the stop is no more an answer of
+  // "the program is not stopped" than it is of anything else.
+  dap::Script script;
+  script.request("stackTrace").request("scopes", R"({"frameId":1})")
+      .request("variables", R"({"variablesReference":1})")
+      .request("evaluate", R"({"frameId":1,"expression":"x"})")
+      .request("configurationDone");
+  int failures = sweep([&](long n) {
+    ToyWorld w(program());
+    EXPECT_EQ(w.attach(), GRDBG_OK);
+    dap::Wire wire;
+    wire.input = script.bytes();
+    GRDBG_Transport t = wire.transport();
+    GRDBG_Dap * s;
+    EXPECT_EQ(grdbg_dap_create(w.dbg, &t, nullptr, &s), GRDBG_OK);
+    int line = 11;
+    uint64_t id;
+    EXPECT_EQ(grdbg_debugger_set_breakpoints(w.dbg, "a.toy", &line, 1, &id), GRDBG_OK);
+    w.run_to_pause();
+    w.debug_allocator.calls = 0;
+    w.debug_allocator.fail_at = n;
+    GRDBG_ServeResult r = GRDBG_SERVE_DETACH;
+    GRDBG_Result result = GRDBG_OK;
+    int oom_returns = 0;
+    for (int i = 0; i < 64; i++) {
+      result = grdbg_dap_serve(s, &r);
+      if (result != GRDBG_ERR_OOM) {
+        break;
+      }
+      ++oom_returns;
+    }
+    bool reached = w.debug_allocator.calls >= n;
+    w.debug_allocator.fail_at = 0;
+    EXPECT_EQ(result, GRDBG_OK) << "n=" << n;
+    std::vector<dap::Msg> all = dap::messages(wire.output);
+    std::vector<int> answered(static_cast<size_t>(script.last_seq()) + 1, 0);
+    for (const dap::Msg & m : all) {
+      if (m.is_response()) {
+        int64_t seq = m.num("request_seq");
+        if (seq >= 1 && seq <= script.last_seq()) {
+          answered[static_cast<size_t>(seq)]++;
+        }
+        // An error that says the stopped program is not stopped is a wrong one.
+        EXPECT_NE(m.message(), "the program is not stopped") << "n=" << n;
+      }
+    }
+    for (int64_t q = 1; q <= script.last_seq(); q++) {
+      // A read that failed before the request was parsed is read again; a
+      // request that was parsed and lost memory is answered. Either way once.
+      EXPECT_EQ(answered[static_cast<size_t>(q)], 1) << "request " << q << " with allocation " << n << " failing (" << oom_returns << " out-of-memory returns)";
+    }
+    grdbg_dap_destroy(s);
+    return reached;
+  });
+  EXPECT_GE(failures, 10);
+}
+
+TEST(AllocFail, ARepeatedReadWithinOneStopDoesNotGrowTheStopsMemory) {
+  // The strings a request reads from the model live in the stop's arena until
+  // the next resume. A client that reads the same variables over and over
+  // must not make it grow: what a request took is given back when it ends.
+  dap::Script one;
+  one.request("scopes", R"({"frameId":1})");
+  ToyWorld w(program());
+  ASSERT_EQ(w.attach(), GRDBG_OK);
+  dap::Script script;
+  script.request("scopes", R"({"frameId":1})");
+  for (int i = 0; i < 1000; i++) {
+    script.request("variables", R"({"variablesReference":1})")
+        .request("evaluate", R"({"frameId":1,"expression":"r"})")
+        .request("scopes", R"({"frameId":1})");
+  }
+  script.request("configurationDone");
+  dap::Wire wire;
+  wire.input = script.bytes();
+  GRDBG_Transport t = wire.transport();
+  GRDBG_Dap * s;
+  ASSERT_EQ(grdbg_dap_create(w.dbg, &t, nullptr, &s), GRDBG_OK);
+  int line = 11;
+  uint64_t id;
+  ASSERT_EQ(grdbg_debugger_set_breakpoints(w.dbg, "a.toy", &line, 1, &id), GRDBG_OK);
+  w.run_to_pause();
+  long before = w.debug_allocator.live;
+  GRDBG_ServeResult r;
+  ASSERT_EQ(grdbg_dap_serve(s, &r), GRDBG_OK);
+  EXPECT_EQ(r, GRDBG_SERVE_RESUME);
+  // The stop's frames, the table of variablesReferences and the session's
+  // buffers are taken once, on the first requests; the 3,000 reads after that
+  // took nothing that stayed. (The arena grew a 2 KiB chunk every few dozen
+  // requests before: thirty blocks over this many.)
+  long grown = w.debug_allocator.live - before;
+  EXPECT_LE(grown, 5) << "the stop's arena grew by " << grown << " blocks over 3000 reads";
+  std::vector<dap::Msg> all = dap::messages(wire.output);
+  size_t variables = 0;
+  for (const dap::Msg & m : all) {
+    variables += m.is_response() && m.command() == "variables" && m.success();
+  }
+  EXPECT_EQ(variables, 1000u) << "and every read was answered";
+  grdbg_dap_destroy(s);
+}
+
 GRDBG_TEST_MAIN()

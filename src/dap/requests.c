@@ -171,10 +171,20 @@ static GRDBG_Result not_stopped(GRDBG_Dap * dap, const GRDBG_Request * rq) {
   return grdbg_response_error(dap, rq, "the program is not stopped");
 }
 
-/* Whether the program is stopped, as the model sees it. */
-static bool stopped(GRDBG_Dap * dap) {
+/* Whether the program is stopped, as the model sees it: ::GRDBG_OK, or
+ * ::GRDBG_ERR_OOM when the model could not even read the stop (the program may
+ * well be stopped, and "it is not" would be a wrong answer), or another result
+ * for a program that is not. */
+static GRDBG_Result stop_state(GRDBG_Dap * dap) {
   size_t total;
-  return grdbg_debugger_frames(dap->debugger, &total, NULL) == GRDBG_OK;
+  return grdbg_debugger_frames(dap->debugger, &total, NULL);
+}
+
+/* Answers "the program is not stopped" for a result that says so, and passes
+ * an out-of-memory result up unanswered so that it is reported as one. */
+static GRDBG_Result refuse_unless_stopped(
+    GRDBG_Dap * dap, const GRDBG_Request * rq, GRDBG_Result state) {
+  return state == GRDBG_ERR_OOM ? state : not_stopped(dap, rq);
 }
 
 /* The frame id of an argument, as a model index, or SIZE_MAX if there is none
@@ -185,9 +195,10 @@ static GRDBG_Result frame_arg(GRDBG_Dap * dap, const GRDBG_Request * rq,
   int64_t id = 0;
   int have = arg_int(rq, key, &id);
   size_t total, available;
-  if (grdbg_debugger_frames(dap->debugger, &total, &available) != GRDBG_OK) {
+  GRDBG_Result state = grdbg_debugger_frames(dap->debugger, &total, &available);
+  if (state != GRDBG_OK) {
     *out_replied = true;
-    return not_stopped(dap, rq);
+    return refuse_unless_stopped(dap, rq, state);
   }
   if (have == 0 && !required) {
     *out_index = 0;
@@ -372,8 +383,9 @@ static GRDBG_Result do_threads(GRDBG_Dap * dap, const GRDBG_Request * rq) {
 
 static GRDBG_Result do_stack_trace(GRDBG_Dap * dap, const GRDBG_Request * rq) {
   size_t total, available;
-  if (grdbg_debugger_frames(dap->debugger, &total, &available) != GRDBG_OK) {
-    return not_stopped(dap, rq);
+  GRDBG_Result state = grdbg_debugger_frames(dap->debugger, &total, &available);
+  if (state != GRDBG_OK) {
+    return refuse_unless_stopped(dap, rq, state);
   }
   sync_ids(dap, available);
   int64_t start = 0, levels = 0;
@@ -493,8 +505,9 @@ static GRDBG_Result do_scopes(GRDBG_Dap * dap, const GRDBG_Request * rq) {
 }
 
 static GRDBG_Result do_variables(GRDBG_Dap * dap, const GRDBG_Request * rq) {
-  if (!stopped(dap)) {
-    return not_stopped(dap, rq);
+  GRDBG_Result state = stop_state(dap);
+  if (state != GRDBG_OK) {
+    return refuse_unless_stopped(dap, rq, state);
   }
   {
     size_t total, available;
@@ -598,8 +611,9 @@ static GRDBG_Result do_evaluate(GRDBG_Dap * dap, const GRDBG_Request * rq) {
 }
 
 static GRDBG_Result do_continue(GRDBG_Dap * dap, const GRDBG_Request * rq) {
-  if (!stopped(dap)) {
-    return not_stopped(dap, rq);
+  GRDBG_Result state = stop_state(dap);
+  if (state != GRDBG_OK) {
+    return refuse_unless_stopped(dap, rq, state);
   }
   if (grdbg_debugger_continue(dap->debugger) != GRDBG_OK) {
     return grdbg_response_error(dap, rq, "the program could not be continued");
@@ -619,8 +633,9 @@ static GRDBG_Result do_continue(GRDBG_Dap * dap, const GRDBG_Request * rq) {
 
 static GRDBG_Result do_step(
     GRDBG_Dap * dap, const GRDBG_Request * rq, GRDBG_StepKind kind) {
-  if (!stopped(dap)) {
-    return not_stopped(dap, rq);
+  GRDBG_Result state = stop_state(dap);
+  if (state != GRDBG_OK) {
+    return refuse_unless_stopped(dap, rq, state);
   }
   GRDBG_Result s = grdbg_debugger_step(dap->debugger, kind);
   if (s == GRDBG_ERR_OOM) {
@@ -646,7 +661,11 @@ static GRDBG_Result do_step_out(GRDBG_Dap * dap, const GRDBG_Request * rq) {
 }
 
 static GRDBG_Result do_pause(GRDBG_Dap * dap, const GRDBG_Request * rq) {
-  if (!stopped(dap)) {
+  GRDBG_Result state = stop_state(dap);
+  if (state == GRDBG_ERR_OOM) {
+    return state;
+  }
+  if (state != GRDBG_OK) {
     return grdbg_response_error(dap, rq,
         "the program is running: pausing it needs the host to post an interrupt");
   }
@@ -767,11 +786,29 @@ GRDBG_Result grdbg_dap_handle(GRDBG_Dap * dap, const GTEXT_JSON_Value * root) {
   if (arguments != NULL && gtext_json_typeof(arguments) == GTEXT_JSON_OBJECT) {
     rq.arguments = arguments;
   }
+  /* What a request reads out of the model is copied into its response, so the
+   * strings it took are given back when it is done: a client that asks again
+   * and again, within one stop, does not make the arena grow. A response not
+   * sent because memory ran out is answered all the same, without allocating,
+   * so the client is never left waiting for a reply that will not come. */
+  GRDBG_ArenaMark mark = grdbg_arena_mark(dap->debugger);
+  int64_t sent_before = dap->out_seq;
+  GRDBG_Result result = GRDBG_ERR_INVALID;
+  bool dispatched = false;
   for (size_t i = 0; i < sizeof requests / sizeof requests[0]; i++) {
     size_t n = strlen(requests[i].name);
     if (n == rq.command_length && memcmp(requests[i].name, rq.command, n) == 0) {
-      return requests[i].handler(dap, &rq);
+      result = requests[i].handler(dap, &rq);
+      dispatched = true;
+      break;
     }
   }
-  return unsupported(dap, &rq);
+  if (!dispatched) {
+    result = unsupported(dap, &rq);
+  }
+  grdbg_arena_release(dap->debugger, mark);
+  if (result == GRDBG_ERR_OOM && dap->out_seq == sent_before) {
+    (void)grdbg_response_oom(dap, rq.seq, rq.command, rq.command_length);
+  }
+  return result;
 }

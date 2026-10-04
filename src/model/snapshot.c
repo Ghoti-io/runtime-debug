@@ -60,6 +60,35 @@ void grdbg_invalidate(GRDBG_Debugger * d) {
   }
 }
 
+GRDBG_ArenaMark grdbg_arena_mark(const GRDBG_Debugger * d) {
+  GRDBG_ArenaMark mark = {d->chunks, d->chunks != NULL ? d->chunks->used : 0};
+  return mark;
+}
+
+void grdbg_arena_release(GRDBG_Debugger * d, GRDBG_ArenaMark mark) {
+  if (mark.chunk != NULL) {
+    bool found = false;
+    for (const GRDBG_Chunk * c = d->chunks; c != NULL; c = c->next) {
+      if (c == mark.chunk) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      return; /* the stop ended since: the arena was emptied, not extended */
+    }
+  }
+  /* The chunks taken since the mark are in front of the marked one. */
+  while (d->chunks != mark.chunk) {
+    GRDBG_Chunk * next = d->chunks->next;
+    grdbg_free(d, d->chunks);
+    d->chunks = next;
+  }
+  if (d->chunks != NULL) {
+    d->chunks->used = mark.used;
+  }
+}
+
 static void * arena_alloc(GRDBG_Debugger * d, size_t size) {
   size = (size + 7u) & ~(size_t)7u;
   GRDBG_Chunk * chunk = d->chunks;

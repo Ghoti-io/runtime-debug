@@ -281,6 +281,48 @@ GRDBG_Result grdbg_response_error(GRDBG_Dap * dap,
   return grdbg_dap_send(dap, &out);
 }
 
+GRDBG_Result grdbg_response_oom(GRDBG_Dap * dap, int64_t request_seq,
+    const char * command, size_t command_length) {
+  /* No allocation: the message is built in a buffer on the stack, because the
+   * session's memory is what has just run out. The command is copied only if
+   * it is plain, so that nothing needs escaping. */
+  char name[64];
+  size_t n = 0;
+  for (size_t i = 0; i < command_length && n + 1 < sizeof name; i++) {
+    char c = command[i];
+    bool plain = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') || c == '_';
+    if (!plain) {
+      n = 0;
+      break;
+    }
+    name[n++] = c;
+  }
+  name[n] = '\0';
+  char frame[GRDBG_PREFIX + 256];
+  char * body = frame + GRDBG_PREFIX;
+  int length = snprintf(body, sizeof frame - GRDBG_PREFIX,
+      "{\"seq\":%lld,\"type\":\"response\",\"request_seq\":%lld,"
+      "\"success\":false,\"command\":\"%s\",\"message\":\"out of memory\"}",
+      (long long)next_seq(dap), (long long)request_seq, name);
+  if (length < 0 || (size_t)length >= sizeof frame - GRDBG_PREFIX) {
+    return GRDBG_ERR_INTERNAL;
+  }
+  char header[GRDBG_PREFIX];
+  int h = snprintf(header, sizeof header, "Content-Length: %d\r\n\r\n", length);
+  if (h < 0 || (size_t)h >= sizeof header) {
+    return GRDBG_ERR_INTERNAL;
+  }
+  char * start = body - h;
+  memcpy(start, header, (size_t)h);
+  GRDBG_Result r = dap->transport.write(dap->transport.user, start, (size_t)h + (size_t)length);
+  if (r != GRDBG_OK) {
+    return r == GRDBG_ERR_OOM ? r : GRDBG_ERR_IO;
+  }
+  dap->out_seq++;
+  return GRDBG_OK;
+}
+
 GRDBG_Result grdbg_response_end(
     GRDBG_Dap * dap, const GRDBG_Request * request, GRDBG_Out * out) {
   if (out->body_open) {
