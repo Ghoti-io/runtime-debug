@@ -87,7 +87,7 @@ void planted_handler(GRCORE_Context * context, void * value, GRCORE_PollCall *) 
 }
 
 const GRCORE_Key kPlantedKey = {"planted debugger", GRCORE_CARDINALITY_ONE,
-    GRCORE_PHASE_YIELD, nullptr, planted_handler};
+    GRCORE_PHASE_YIELD, nullptr, planted_handler, nullptr, nullptr, nullptr};
 
 /// Reads everything a client could ask for at a stop.
 void read_everything(GRDBG_Debugger * d) {

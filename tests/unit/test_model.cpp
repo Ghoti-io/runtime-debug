@@ -308,7 +308,7 @@ TEST(Arming, AnAttachedDebuggerWithNothingToDoLeavesTheFastPathAlone) {
   // A handler of another service never runs: no poll left the fast path.
   int slow_polls = 0;
   static const GRCORE_Key probe_key = {"probe", GRCORE_CARDINALITY_ONE, GRCORE_PHASE_OBSERVE, nullptr,
-      [](GRCORE_Context *, void * v, GRCORE_PollCall *) { ++*static_cast<int *>(v); }};
+      [](GRCORE_Context *, void * v, GRCORE_PollCall *) { ++*static_cast<int *>(v); }, nullptr, nullptr, nullptr};
   ASSERT_EQ(grcore_context_register(w.ctx, &probe_key, &slow_polls), GRCORE_OK);
   GRCORE_Outcome outcome;
   ASSERT_EQ(w.run(&outcome), GRCORE_OK);

@@ -212,7 +212,7 @@ static void key_destroy(GRCORE_Context * context, void * value) {
 }
 
 const GRCORE_Key grdbg_key = {"runtime-debug", GRCORE_CARDINALITY_ONE,
-    GRCORE_PHASE_YIELD, key_destroy, yield_poll};
+    GRCORE_PHASE_YIELD, key_destroy, yield_poll, NULL, NULL, NULL};
 
 const GRCORE_Key * grdbg_debugger_key(void) {
   return &grdbg_key;
