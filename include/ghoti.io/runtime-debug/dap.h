@@ -131,8 +131,13 @@ GRDBG_API void grdbg_dap_destroy(GRDBG_Dap * dap);
  * @return ::GRDBG_OK; ::GRDBG_ERR_FORMAT or ::GRDBG_ERR_LIMIT for broken
  *   framing; ::GRDBG_ERR_IO for a failed transport; ::GRDBG_ERR_OOM;
  *   ::GRDBG_ERR_INVALID for NULL or a call from a thread that does not own the
- *   context. After ::GRDBG_ERR_OOM the request being handled is lost (it may or
- *   may not have been answered) and the session carries on. After a framing or
+ *   context. After ::GRDBG_ERR_OOM the request being handled is lost and the
+ *   session carries on; the client has been answered all the same, with
+ *   `success: false` and the message "out of memory", built without
+ *   allocating (when the request could not even be parsed, the seq and command
+ *   in that answer are read off its text; a message that is not a request, with
+ *   neither, is not answered). Only a response already written whole is not
+ *   written twice. After a framing or
  *   I/O error the session is over, every later
  *   call returns the same error, and the debugger has been disarmed so the host
  *   can resume the run free.
