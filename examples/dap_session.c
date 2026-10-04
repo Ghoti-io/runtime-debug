@@ -47,6 +47,18 @@
  * Build and run with `make examples`.
  */
 
+#ifdef _WIN32
+/* The example hands a connected socket to grdbg_transport_create_fd, which is a
+ * stub on Windows. Exit status 77 is "skipped": the Makefile counts it and
+ * does not fail. */
+#include <stdio.h>
+
+int main(void) {
+  printf("SKIP: the descriptor transport is not available on Windows\n");
+  return 77;
+}
+#else
+
 #define _POSIX_C_SOURCE 200809L
 
 #include <ghoti.io/runtime-debug/runtime-debug.h>
@@ -373,3 +385,5 @@ int main(void) {
   CHECK(sum == 3);
   return 0;
 }
+
+#endif /* _WIN32 */

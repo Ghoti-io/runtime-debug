@@ -122,10 +122,11 @@ GRDBG_Result grdbg_transport_create_fd(int in_fd, int out_fd,
 
 #else /* _WIN32 */
 
-/* TODO(windows): descriptors are a POSIX idea here, and this branch has never
- * been compiled or run. A Windows host binds its own handles through a
- * GRDBG_Transport of its own; verifying this branch means a Windows
- * transport over sockets or pipes whose tests pass on a Windows machine. */
+/* Descriptors are a POSIX idea: a Windows host binds its own handles through a
+ * GRDBG_Transport of its own, and this is a stub that says so (documented in
+ * transport.h). It is compiled and run under wine, and tests/unit/
+ * test_transport.cpp checks its error return. A Windows transport over sockets
+ * or pipes would be a feature, not a verification of this branch. */
 GRDBG_Result grdbg_transport_create_fd(int in_fd, int out_fd,
     const GRDBG_Allocator * allocator, GRDBG_Transport ** out_transport) {
   (void)in_fd;

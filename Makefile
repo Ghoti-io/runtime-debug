@@ -377,10 +377,14 @@ TEST_LD_PATH := $(APP_DIR):$(LIB_INSTALL_PATH)/$(SUITE)
 # something that compiles and does nothing it claims. It is a test gate for
 # the same reason (a failing example fails `make test`).
 examples: $(APP_DIR)/$(TARGET) $(EXAMPLES) ## Build the examples and run each
-	@for e in $(EXAMPLES); do \
+	@ran=0; skipped=0; for e in $(EXAMPLES); do \
 		printf '\n### Example %s ###\n\n' "$$(basename $$e $(EXE_EXTENSION))"; \
-		LD_LIBRARY_PATH="$(TEST_LD_PATH)" $$e || exit 1; \
-	done
+		LD_LIBRARY_PATH="$(TEST_LD_PATH)" $$e; rc=$$?; \
+		if [ $$rc -eq 77 ]; then skipped=$$((skipped + 1)); \
+		elif [ $$rc -ne 0 ]; then exit 1; \
+		else ran=$$((ran + 1)); fi; \
+	done; \
+	printf '\nexamples: %s ran, %s skipped (exit status 77: not available on this target)\n' "$$ran" "$$skipped"
 
 # clang accepts -Wstrict-aliasing and implements nothing, so under clang the
 # probe can never be reported and the gate would fail for a reason that says

@@ -5,6 +5,10 @@
  * with a stored transcript, over a memory transport, over a socket pair, and
  * over loopback TCP that the test binds and accepts.
  *
+ * The socket transports are POSIX descriptors and do not exist on Windows (the
+ * descriptor transport is a stub there); the two tests are reported SKIPPED and
+ * the memory transport carries the transcript.
+ *
  * The three transports carry one transcript: the adapter is a function of the
  * requests, not of how the bytes arrive. The stored transcript is a
  * requirement written down, not an observation: it was read through against
@@ -16,11 +20,13 @@
 
 #include "dap_helpers.h"
 
+#ifndef _WIN32
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#endif
 
 #include <cstdlib>
 #include <fstream>
@@ -128,6 +134,7 @@ Served serve_on(const GRDBG_Transport & transport) {
   return served;
 }
 
+#ifndef _WIN32
 /// The client of a connected stream socket: sends each request, waits for its
 /// response, and collects every server message in the order it arrives.
 std::vector<std::string> lockstep_client(int fd, const dap::Script & script) {
@@ -182,6 +189,7 @@ std::vector<std::string> lockstep_client(int fd, const dap::Script & script) {
   }
   return received;
 }
+#endif  // _WIN32
 
 }  // namespace
 
@@ -307,6 +315,8 @@ TEST(DapSession, TheTranscriptSaysWhatTheTaskAsksOf) {
   EXPECT_FALSE(dap::response_to(all, "disconnect") == nullptr);
 }
 
+#ifndef _WIN32
+
 TEST(DapSession, OverASocketPairItIsTheSameTranscript) {
   int fds[2];
   ASSERT_EQ(socketpair(AF_UNIX, SOCK_STREAM, 0, fds), 0);
@@ -362,6 +372,18 @@ TEST(DapSession, OverLoopbackTcpTheTestBindsAndAcceptsItIsTheSameTranscript) {
   EXPECT_TRUE(served.host.finished);
   EXPECT_EQ(served.output, unattended_output());
 }
+
+#else  // _WIN32
+
+TEST(DapSession, OverASocketPairItIsTheSameTranscript) {
+  GTEST_SKIP() << "descriptor transports do not exist on Windows (create_fd is a stub)";
+}
+
+TEST(DapSession, OverLoopbackTcpTheTestBindsAndAcceptsItIsTheSameTranscript) {
+  GTEST_SKIP() << "descriptor transports do not exist on Windows (create_fd is a stub)";
+}
+
+#endif  // _WIN32
 
 TEST(DapSession, ABrokenTransportEndsTheSessionAndTheDebuggedProgramRunsFree) {
   // The client goes away at the first stop (end of input after the first

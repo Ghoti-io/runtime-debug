@@ -90,8 +90,16 @@ typedef struct GRDBG_Transport {
  * @param allocator The allocator for the transport object; NULL is the default.
  * @param out_transport Receives the transport. Written only on success; free
  *   it with ::grdbg_transport_destroy after the session using it is destroyed.
+ * **On Windows this is a stub.** A C descriptor there is not a socket or a
+ * handle a `send` or a `ReadFile` can take, and the library would have to pick
+ * between them. It answers ::GRDBG_ERR_UNSUPPORTED whatever it is given (the
+ * arguments are not checked, nothing is allocated, and `*out_transport` is not
+ * written); a Windows host binds its sockets or pipes through a
+ * ::GRDBG_Transport of its own, which is what the struct is for. The memory
+ * transport and the DAP session over any transport work there.
+ *
  * @return ::GRDBG_OK, ::GRDBG_ERR_INVALID for a negative descriptor or a NULL
- *   output, ::GRDBG_ERR_UNSUPPORTED on Windows, or ::GRDBG_ERR_OOM.
+ *   output, ::GRDBG_ERR_UNSUPPORTED on Windows (always), or ::GRDBG_ERR_OOM.
  */
 GRDBG_API GRDBG_Result grdbg_transport_create_fd(int in_fd, int out_fd,
     const GRDBG_Allocator * allocator, GRDBG_Transport ** out_transport);

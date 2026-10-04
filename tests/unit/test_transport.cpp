@@ -2,15 +2,19 @@
  * @file
  *
  * The transports this library makes: a memory buffer and a pair of POSIX file
- * descriptors.
+ * descriptors. On Windows the descriptor transport is a documented stub that
+ * answers ::GRDBG_ERR_UNSUPPORTED, and the tests of it are replaced by one that
+ * checks that answer.
  *
  * Copyright 2026 by Corey Pennycuff
  */
 
 #include "test_helpers.h"
 
+#ifndef _WIN32
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
 
 #include <cstring>
 #include <thread>
@@ -64,6 +68,7 @@ TEST(MemoryTransport, ArgumentsAreCheckedAndOutputIsOnlyForMemoryTransports) {
   const uint8_t * out;
   size_t length;
   EXPECT_EQ(grdbg_transport_memory_output(nullptr, &out, &length), GRDBG_ERR_INVALID);
+#ifndef _WIN32
   int fds[2];
   ASSERT_EQ(pipe(fds), 0);
   GRDBG_Transport * fd;
@@ -72,6 +77,7 @@ TEST(MemoryTransport, ArgumentsAreCheckedAndOutputIsOnlyForMemoryTransports) {
   grdbg_transport_destroy(fd);
   close(fds[0]);
   close(fds[1]);
+#endif
   grdbg_transport_destroy(nullptr);
 }
 
@@ -91,6 +97,8 @@ TEST(MemoryTransport, AllocationFailureIsOomAndLeavesNothing) {
     EXPECT_EQ(a.live, 0);
   }
 }
+
+#ifndef _WIN32
 
 TEST(FdTransport, MovesBytesBothWaysOverAPipePairAndLeavesTheDescriptorsOpen) {
   int to_lib[2], from_lib[2];
@@ -185,5 +193,26 @@ TEST(FdTransport, ArgumentsAreChecked) {
   EXPECT_EQ(grdbg_transport_create_fd(0, 1, a.get(), &t), GRDBG_ERR_OOM);
   EXPECT_EQ(a.live, 0);
 }
+
+#else  // _WIN32
+
+/* There are no descriptors to move bytes over: the stub says so, whatever it
+ * is given, writes nothing through its output and allocates nothing. A host on
+ * Windows binds its own handles through a GRDBG_Transport of its own. */
+TEST(FdTransport, IsUnsupportedOnWindowsWhateverItIsGiven) {
+  GRDBG_Transport * const untouched = reinterpret_cast<GRDBG_Transport *>(0x1);
+  GRDBG_Transport * t = untouched;
+  TrackingAllocator a;
+  EXPECT_EQ(grdbg_transport_create_fd(0, 1, nullptr, &t), GRDBG_ERR_UNSUPPORTED);
+  EXPECT_EQ(t, untouched);
+  EXPECT_EQ(grdbg_transport_create_fd(0, 1, a.get(), &t), GRDBG_ERR_UNSUPPORTED);
+  EXPECT_EQ(a.calls, 0) << "the stub must not allocate";
+  EXPECT_EQ(a.live, 0);
+  EXPECT_EQ(grdbg_transport_create_fd(-1, 1, nullptr, &t), GRDBG_ERR_UNSUPPORTED);
+  EXPECT_EQ(grdbg_transport_create_fd(0, 1, nullptr, nullptr), GRDBG_ERR_UNSUPPORTED);
+  EXPECT_EQ(t, untouched);
+}
+
+#endif  // _WIN32
 
 GRDBG_TEST_MAIN()

@@ -387,5 +387,6 @@ measurement exists, and these are it.
 - **CI.** It is deferred for `debug` in the spine until it has a body; a local
   `make test` is the gate.
 - **The Windows arm** of the descriptor transport: `grdbg_transport_create_fd`
-  is `GRDBG_ERR_UNSUPPORTED` there (`TODO(windows)`), and a Windows host binds its
+  is `GRDBG_ERR_UNSUPPORTED` there, whatever it is given (a stub that is compiled
+  and tested under wine), and a Windows host binds its
   own handles through a `GRDBG_Transport` of its own.
