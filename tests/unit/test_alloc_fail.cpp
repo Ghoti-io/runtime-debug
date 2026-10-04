@@ -293,6 +293,9 @@ TEST(AllocFail, EveryRequestIsAnsweredEvenWhenTheAnswerCouldNotBeBuilt) {
   // "the program is not stopped" than it is of anything else.
   dap::Script script;
   script.request("stackTrace").request("scopes", R"({"frameId":1})")
+      // A message that is not a request has nothing to be answered, whether or
+      // not memory ran out while it was read.
+      .raw(dap::frame(R"({"type":"event","event":"noise","body":{"note":"not a request"}})"))
       .request("variables", R"({"variablesReference":1})")
       .request("evaluate", R"({"frameId":1,"expression":"x"})")
       .request("configurationDone");
@@ -325,8 +328,10 @@ TEST(AllocFail, EveryRequestIsAnsweredEvenWhenTheAnswerCouldNotBeBuilt) {
     EXPECT_EQ(result, GRDBG_OK) << "n=" << n;
     std::vector<dap::Msg> all = dap::messages(wire.output);
     std::vector<int> answered(static_cast<size_t>(script.last_seq()) + 1, 0);
+    size_t responses = 0;
     for (const dap::Msg & m : all) {
       if (m.is_response()) {
+        ++responses;
         int64_t seq = m.num("request_seq");
         if (seq >= 1 && seq <= script.last_seq()) {
           answered[static_cast<size_t>(seq)]++;
@@ -335,6 +340,7 @@ TEST(AllocFail, EveryRequestIsAnsweredEvenWhenTheAnswerCouldNotBeBuilt) {
         EXPECT_NE(m.message(), "the program is not stopped") << "n=" << n;
       }
     }
+    EXPECT_EQ(responses, static_cast<size_t>(script.last_seq())) << "n=" << n << ": an answer to something that was not a request";
     for (int64_t q = 1; q <= script.last_seq(); q++) {
       // A read that failed before the request was parsed is read again; a
       // request that was parsed and lost memory is answered. Either way once.

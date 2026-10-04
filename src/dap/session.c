@@ -184,7 +184,11 @@ GRDBG_Result grdbg_dap_serve(GRDBG_Dap * dap, GRDBG_ServeResult * out_result) {
         const char * command = "";
         size_t command_length = 0;
         scan_request(body, length, &seq, &command, &command_length);
-        (void)grdbg_response_oom(dap, seq, command, command_length);
+        if (seq != 0 || command_length != 0) {
+          /* (A message with neither is not a request and has nothing to be
+           * answered, as grdbg_dap_handle decides for one it can parse.) */
+          (void)grdbg_response_oom(dap, seq, command, command_length);
+        }
         return GRDBG_ERR_OOM;
       }
       continue; /* well framed, but not JSON: nothing to answer to */
