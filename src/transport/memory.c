@@ -100,6 +100,15 @@ static void memory_release(GRDBG_TransportBase * base) {
   }
 }
 
+bool grdbg_transport_valid(const GRDBG_Transport * transport) {
+  /* The first member is read to learn how much of the rest exists, so a
+   * transport is judged by that alone (see grcore_key_valid in runtime-core). A
+   * size above this header's is a transport from a newer header, which is
+   * accepted. */
+  return transport != NULL && transport->size >= GRDBG_TRANSPORT_MIN_SIZE &&
+      transport->size % _Alignof(GRDBG_Transport) == 0;
+}
+
 GRDBG_Result grdbg_transport_create_memory(const void * input, size_t length,
     const GRDBG_Allocator * allocator, GRDBG_Transport ** out_transport) {
   if (out_transport == NULL || (input == NULL && length > 0)) {
@@ -123,6 +132,7 @@ GRDBG_Result grdbg_transport_create_memory(const void * input, size_t length,
   t->input_length = length;
   t->base.allocator = allocator;
   t->base.release = memory_release;
+  t->base.pub.size = sizeof t->base.pub;
   t->base.pub.user = t;
   t->base.pub.read = memory_read;
   t->base.pub.write = memory_write;
@@ -133,8 +143,8 @@ GRDBG_Result grdbg_transport_create_memory(const void * input, size_t length,
 
 GRDBG_Result grdbg_transport_memory_output(const GRDBG_Transport * transport,
     const uint8_t ** out_data, size_t * out_length) {
-  if (transport == NULL || out_data == NULL || out_length == NULL ||
-      transport->read != memory_read) {
+  if (!grdbg_transport_valid(transport) || out_data == NULL ||
+      out_length == NULL || transport->read != memory_read) {
     return GRDBG_ERR_INVALID;
   }
   const MemoryTransport * t = transport->user;

@@ -114,8 +114,8 @@ static GRCORE_Location bench_locate(
   return (GRCORE_Location){"bench.c", (int)offset + 1};
 }
 
-static const GRCORE_EngineDescriptor bench_engine = {"bench", NULL,
-    bench_locate, NULL, {NULL, NULL, NULL}, {0, 0, 0}, NULL, NULL};
+static const GRCORE_EngineDescriptor bench_engine = GRCORE_ENGINE_DESCRIPTOR_INIT("bench", NULL,
+    bench_locate, NULL, {NULL, NULL, NULL}, {0, 0, 0}, NULL, NULL);
 
 typedef struct {
   GRCORE_Group * group;

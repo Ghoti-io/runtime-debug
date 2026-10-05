@@ -112,6 +112,7 @@ GRDBG_Result grdbg_transport_create_fd(int in_fd, int out_fd,
   t->out_is_socket = fstat(out_fd, &st) == 0 && S_ISSOCK(st.st_mode);
   t->base.allocator = allocator;
   t->base.release = fd_release;
+  t->base.pub.size = sizeof t->base.pub;
   t->base.pub.user = t;
   t->base.pub.read = fd_read;
   t->base.pub.write = fd_write;

@@ -137,6 +137,7 @@
 #define grdbg_transport_create_memory GHOTIIO_RUNTIME_DEBUG(grdbg_transport_create_memory)
 #define grdbg_transport_destroy GHOTIIO_RUNTIME_DEBUG(grdbg_transport_destroy)
 #define grdbg_transport_memory_output GHOTIIO_RUNTIME_DEBUG(grdbg_transport_memory_output)
+#define grdbg_transport_valid GHOTIIO_RUNTIME_DEBUG(grdbg_transport_valid)
 #define grdbg_version_number GHOTIIO_RUNTIME_DEBUG(grdbg_version_number)
 #define grdbg_version_string GHOTIIO_RUNTIME_DEBUG(grdbg_version_string)
 #define grdbg_wants_arming GHOTIIO_RUNTIME_DEBUG(grdbg_wants_arming)

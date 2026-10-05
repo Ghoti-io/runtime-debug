@@ -251,7 +251,8 @@ TEST(Framing, ACreateNeedsAReadAndAWrite) {
   ToyWorld w(basic_program());
   ASSERT_EQ(w.attach(), GRDBG_OK);
   GRDBG_Dap * session = reinterpret_cast<GRDBG_Dap *>(0x1);
-  GRDBG_Transport none = {};
+  GRDBG_Transport none =
+      GRDBG_TRANSPORT_INIT(nullptr, nullptr, nullptr, nullptr);
   EXPECT_EQ(grdbg_dap_create(w.dbg, &none, nullptr, &session), GRDBG_ERR_INVALID);
   EXPECT_EQ(session, reinterpret_cast<GRDBG_Dap *>(0x1));
   dap::Wire wire;

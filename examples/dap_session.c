@@ -135,8 +135,8 @@ static size_t inspect(const GRCORE_Context * context, GRCORE_SlotKind kind,
   return (size_t)snprintf(buffer, size, "%llu", (unsigned long long)value);
 }
 
-static const GRCORE_EngineDescriptor engine = {"count", NULL, locate, inspect,
-    {scope_count, scope, variable}, {0, 0, 0}, NULL, NULL};
+static const GRCORE_EngineDescriptor engine = GRCORE_ENGINE_DESCRIPTOR_INIT("count", NULL, locate, inspect,
+    {scope_count, scope, variable}, {0, 0, 0}, NULL, NULL);
 
 typedef struct {
   GRCORE_EngineId id;

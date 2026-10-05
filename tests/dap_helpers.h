@@ -267,7 +267,7 @@ struct Wire {
   bool closed = false;
 
   GRDBG_Transport transport() {
-    GRDBG_Transport t;
+    GRDBG_Transport t = GRDBG_TRANSPORT_INIT(nullptr, nullptr, nullptr, nullptr);
     t.user = this;
     t.read = [](void * u, void * buffer, size_t capacity, size_t * out) -> GRDBG_Result {
       auto * w = static_cast<Wire *>(u);

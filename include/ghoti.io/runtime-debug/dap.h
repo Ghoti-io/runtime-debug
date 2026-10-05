@@ -97,11 +97,12 @@ typedef enum {
  * allocates from the debugger's allocator.
  *
  * @param debugger The debugger the session drives.
- * @param transport The stream pair; `read` and `write` are required.
+ * @param transport The stream pair; `read` and `write` are required, and it
+ *   must be valid (::grdbg_transport_valid).
  * @param limits The caps; NULL is the defaults.
  * @param out_dap Receives the session. Written only on success.
- * @return ::GRDBG_OK, ::GRDBG_ERR_INVALID for a NULL argument or a transport
- *   without `read` and `write`, or ::GRDBG_ERR_OOM.
+ * @return ::GRDBG_OK, ::GRDBG_ERR_INVALID for a NULL argument, an invalid
+ *   transport (`size`) or one without `read` and `write`, or ::GRDBG_ERR_OOM.
  */
 GRDBG_API GRDBG_Result grdbg_dap_create(GRDBG_Debugger * debugger,
     const GRDBG_Transport * transport, const GRDBG_Limits * limits,

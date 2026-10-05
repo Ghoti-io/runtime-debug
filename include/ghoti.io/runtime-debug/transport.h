@@ -43,6 +43,7 @@
 #include <ghoti.io/runtime-debug/allocator.h>
 #include <ghoti.io/runtime-debug/core.h>
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -51,14 +52,38 @@ extern "C" {
 #endif
 
 /**
- * @brief A stream pair, bound by the host.
+ * @brief A stream pair, bound by the host. Define it with
+ *   ::GRDBG_TRANSPORT_INIT.
  *
  * `read` and `write` are required. A short read is not an error: the library
  * asks again. `write` must take all of `length` bytes or fail; a transport
  * over something that writes short (a socket) loops inside the callback, as
  * the descriptor transport does.
+ *
+ * **The struct grows at the end, and `size` says how far.** The rule is
+ * runtime-core's `GRCORE_Key` (`b/key.h` there has the argument and the
+ * rejected alternatives), applied to the one struct of this library that the
+ * host defines and the library reads: a host binds its own sockets or pipes
+ * through one, which is what the struct is for, and a callback added at the end
+ * (a flush, a readiness wait) would otherwise be read from a struct compiled
+ * before it existed. The first member, `size`, is the `sizeof(GRDBG_Transport)`
+ * of the header the host compiled against, ::GRDBG_TRANSPORT_INIT writes it, and
+ * a member added after `close` is read only where `size` covers it, an absent
+ * one being NULL. No such member exists yet, so ::GRDBG_TRANSPORT_MIN_SIZE is the
+ * whole struct. A struct filled by assignment starts from
+ * ::GRDBG_TRANSPORT_INIT too, never from `{}`. ::grdbg_dap_create (which copies
+ * the transport) and ::grdbg_transport_memory_output refuse with
+ * ::GRDBG_ERR_INVALID a transport that ::grdbg_transport_valid does not
+ * accept; a larger `size` is accepted, the copy keeps the members this library
+ * knows, and the unknown tail is ignored. The transports this library creates
+ * are written at their full size.
  */
 typedef struct GRDBG_Transport {
+  /**
+   * `sizeof(GRDBG_Transport)` as the host compiled it. Set by
+   * ::GRDBG_TRANSPORT_INIT. Never write it by hand.
+   */
+  size_t size;
   void * user; ///< Passed to every callback.
   /** Reads up to `capacity` bytes into `buffer` and stores the count in
    *  `*out_read`. A count of zero is end of input. Returns ::GRDBG_OK or
@@ -72,6 +97,33 @@ typedef struct GRDBG_Transport {
    *  have nothing to close, since the host owns its descriptors. */
   GRDBG_Result (*close)(void * user);
 } GRDBG_Transport;
+
+/** @brief The smallest `size` a transport may state: the layout through
+ *   `close`, which is every member there is. */
+#define GRDBG_TRANSPORT_MIN_SIZE                                            \
+  (offsetof(GRDBG_Transport, close) + sizeof(((GRDBG_Transport *)0)->close))
+
+/** @brief The initialiser of a transport:
+ *   `GRDBG_TRANSPORT_INIT(user, read, write, close)`. Begins with
+ *   `sizeof(GRDBG_Transport)`; `GRDBG_TRANSPORT_INIT(NULL, NULL, NULL, NULL)`
+ *   is the starting point of one filled by assignment. */
+#define GRDBG_TRANSPORT_INIT(...) { sizeof(GRDBG_Transport), __VA_ARGS__ }
+
+/** @brief Whether a transport's `size` covers a member, so that reading it is
+ *   defined. */
+#define GRDBG_TRANSPORT_HAS(transport, member)                              \
+  ((transport)->size >= offsetof(GRDBG_Transport, member) +                 \
+      sizeof((transport)->member))
+
+/**
+ * @brief Whether a transport is acceptable (see ::GRDBG_Transport).
+ *
+ * @param transport The transport. NULL is not valid.
+ * @return true when `size` is at least ::GRDBG_TRANSPORT_MIN_SIZE and a
+ *   multiple of the struct's alignment. It says nothing of the callbacks:
+ *   ::grdbg_dap_create requires `read` and `write`.
+ */
+GRDBG_API bool grdbg_transport_valid(const GRDBG_Transport * transport);
 
 /**
  * @brief A transport over two POSIX file descriptors.

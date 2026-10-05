@@ -45,8 +45,8 @@
 GRDBG_Result grdbg_dap_create(GRDBG_Debugger * debugger,
     const GRDBG_Transport * transport, const GRDBG_Limits * limits,
     GRDBG_Dap ** out_dap) {
-  if (debugger == NULL || transport == NULL || out_dap == NULL ||
-      transport->read == NULL || transport->write == NULL ||
+  if (debugger == NULL || !grdbg_transport_valid(transport) ||
+      out_dap == NULL || transport->read == NULL || transport->write == NULL ||
       !grcore_context_is_owner(grdbg_debugger_context(debugger))) {
     return GRDBG_ERR_INVALID;
   }
@@ -56,7 +56,14 @@ GRDBG_Result grdbg_dap_create(GRDBG_Debugger * debugger,
     return GRDBG_ERR_OOM;
   }
   dap->debugger = debugger;
-  dap->transport = *transport;
+  /* The copy is this library's own full-size struct: the members the host's
+   * size covers, and absent ones zero, so that every member can be read
+   * without asking the host's size again. */
+  memset(&dap->transport, 0, sizeof dap->transport);
+  memcpy(&dap->transport, transport,
+      transport->size < sizeof dap->transport ? transport->size
+                                              : sizeof dap->transport);
+  dap->transport.size = sizeof dap->transport;
   dap->allocator = allocator;
   grdbg_limits_resolve(limits, &dap->limits);
   dap->lines_from_1 = true;

@@ -88,7 +88,7 @@ includes them all.
 | --- | --- |
 | `model.h` | `GRDBG_Debugger`: attached to a context under a cardinality-one YIELD key. Line breakpoints (`grdbg_debugger_set_breakpoints` replaces a source's whole set), `step` (in, over, out), `continue`, `request_pause`, `disarm`, and the state of a stop: frames, scopes and variables. Knows nothing of JSON or of any protocol |
 | `dap.h` | `GRDBG_Dap`: a Debug Adapter Protocol session. `serve` answers requests until one asks the host to proceed, and `notify_stopped` and `notify_finished` emit the events |
-| `transport.h` | `GRDBG_Transport`: a stream pair the host binds, with ready-made ones over POSIX descriptors and a memory buffer |
+| `transport.h` | `GRDBG_Transport`: a stream pair the host binds (a leading `size`, defined with `GRDBG_TRANSPORT_INIT(user, read, write, close)`), with ready-made ones over POSIX descriptors and a memory buffer |
 | `limits.h` | `GRDBG_Limits`: the caps on headers, messages, JSON depth, breakpoints, frames and variables, with `grdbg_limits_default` |
 | `core.h`, `allocator.h`, `libver.h`, `macros.h`, `namespace.h` | the suite's results, allocator, version and symbol namespacing |
 

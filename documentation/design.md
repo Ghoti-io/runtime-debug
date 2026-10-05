@@ -237,6 +237,28 @@ descriptor twice) that continues a partial `write(2)`, retries `EINTR` and sends
 on a socket with `MSG_NOSIGNAL` so that a client that went away is an error and
 not a signal, and one over a memory buffer for the tests and the fuzzer.
 
+**A transport states its own size.** `GRDBG_Transport` is the one struct of this
+library that a host defines and the library reads (the Windows host binds its
+own handles through one, which is what the struct is for), so it follows
+runtime-core's rule for `GRCORE_Key` (that library's `b/key.h` and design
+document have the argument and the rejected alternatives): the first member is
+the `sizeof(GRDBG_Transport)` the host compiled against, written by
+`GRDBG_TRANSPORT_INIT(user, read, write, close)`, and a callback added at the
+end (a flush, a readiness wait) would be read only where that size covers it,
+an absent one being NULL. `grdbg_dap_create` and `grdbg_transport_memory_output`
+refuse with `ERR_INVALID`, before anything is read or called, a transport whose
+size is below `GRDBG_TRANSPORT_MIN_SIZE` or off the struct's alignment (zero is
+a struct filled by assignment that forgot its size); a larger size is accepted.
+The session *copies* the transport, so the copy is built as this library's own
+full-size struct: the bytes the host's size covers, the rest zero, and `size`
+set. Nothing has been added after `close`, so the tests (`test_transport_size.cpp`)
+cover the rule, the library's own transports, the refusals with a full-size
+control, and a newer size, and have no older layout to copy. `GRDBG_Limits` is
+not given a size: it is a value filled by `grdbg_limits_default` or by
+assignment, where a zero field means the default, and the library's own
+function is how a caller gets one. It has the same exposure to a struct built
+before a cap was added, and is left as an open decision, not decided here.
+
 **Rejected: `FILE *`.** Buffering and `fflush` are decisions the adapter would
 have to know about, and a socket needs `fdopen` and a mode that makes reading
 and writing share state. **Rejected: a callback pair with no object.** It cannot
