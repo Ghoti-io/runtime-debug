@@ -1,0 +1,6 @@
+/* Fixture for the gate self-test; not part of the library. */
+#ifndef GHOTI_IO_GRDBG_B_CTX_H
+#define GHOTI_IO_GRDBG_B_CTX_H
+#include <ghoti.io/runtime-debug/macros.h>
+GRDBG_API int grdbg_ctx_make(void);
+#endif
