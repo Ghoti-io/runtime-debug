@@ -211,8 +211,8 @@ static void key_destroy(GRCORE_Context * context, void * value) {
   d->allocator->free_fn(d->allocator->ctx, d);
 }
 
-const GRCORE_Key grdbg_key = {"runtime-debug", GRCORE_CARDINALITY_ONE,
-    GRCORE_PHASE_YIELD, key_destroy, yield_poll, NULL, NULL, NULL};
+const GRCORE_Key grdbg_key = GRCORE_KEY_INIT("runtime-debug", GRCORE_CARDINALITY_ONE,
+    GRCORE_PHASE_YIELD, key_destroy, yield_poll, NULL, NULL, NULL);
 
 const GRCORE_Key * grdbg_debugger_key(void) {
   return &grdbg_key;

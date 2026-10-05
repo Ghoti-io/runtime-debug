@@ -326,7 +326,7 @@ void reckless_handler(GRCORE_Context *, void *, GRCORE_PollCall * call) {
   grcore_pollcall_vote(call, GRCORE_VERDICT_PAUSE);
 }
 
-const GRCORE_Key kRecklessKey = {"reckless", GRCORE_CARDINALITY_ONE, GRCORE_PHASE_YIELD, nullptr, reckless_handler, nullptr, nullptr, nullptr};
+const GRCORE_Key kRecklessKey = GRCORE_KEY_INIT("reckless", GRCORE_CARDINALITY_ONE, GRCORE_PHASE_YIELD, nullptr, reckless_handler, nullptr, nullptr, nullptr);
 
 }  // namespace
 

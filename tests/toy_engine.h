@@ -188,8 +188,8 @@ struct Toy {
 
 constexpr size_t kHeader = 3;  // function, pc, polled
 
-inline const GRCORE_Key kToyKey = {"toy engine", GRCORE_CARDINALITY_ONE,
-    GRCORE_PHASE_NONE, nullptr, nullptr, nullptr, nullptr, nullptr};
+inline const GRCORE_Key kToyKey = GRCORE_KEY_INIT("toy engine", GRCORE_CARDINALITY_ONE,
+    GRCORE_PHASE_NONE, nullptr, nullptr, nullptr, nullptr, nullptr);
 
 inline Toy * of(const GRCORE_Context * context) {
   return static_cast<Toy *>(grcore_context_slot(context, &kToyKey));

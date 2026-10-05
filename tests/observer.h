@@ -229,7 +229,7 @@ class Observer {
   }
 
   static const GRCORE_Key & key() {
-    static const GRCORE_Key k = {"frame observer", GRCORE_CARDINALITY_MANY, GRCORE_PHASE_OBSERVE, nullptr, &Observer::handler, nullptr, nullptr, nullptr};
+    static const GRCORE_Key k = GRCORE_KEY_INIT("frame observer", GRCORE_CARDINALITY_MANY, GRCORE_PHASE_OBSERVE, nullptr, &Observer::handler, nullptr, nullptr, nullptr);
     return k;
   }
 };
