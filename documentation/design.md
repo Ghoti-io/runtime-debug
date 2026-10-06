@@ -401,13 +401,14 @@ measurement exists, and these are it.
 
 ## What is not here
 
-- **Wiring into the `tang` command and the web-server host** is story 13. Nothing
-  in `lang-tang` changes here, and `lang-tang` may depend on this library only
-  as a host does (AD-2: the `tang` command uses `?debug`).
+- **Wiring into the `tang` command and the web-server host** was story 13, and
+  is done. Nothing in `lang-tang` changes here, and `lang-tang` depends on this
+  library only as a host does (AD-2: the `tang` command uses `?debug`).
 - **CDP**, and any remote-debugging policy: who may connect, over what.
 - **Expression evaluation, structured values, object ids**, as above.
-- **CI.** It is deferred for `debug` in the spine until it has a body; a local
-  `make test` is the gate.
+- **CI** was deferred and now exists (`.github/workflows`, commit `9ce6768`): both compilers, the
+  sanitizers, Valgrind, fuzz, a coverage floor and MSYS2. GitHub Actions is
+  disabled for cost, so a local `make test` is the gate wherever it matters.
 - **The Windows arm** of the descriptor transport: `grdbg_transport_create_fd`
   is `GRDBG_ERR_UNSUPPORTED` there, whatever it is given (a stub that is compiled
   and tested under wine), and a Windows host binds its
