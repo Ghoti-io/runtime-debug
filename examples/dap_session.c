@@ -136,7 +136,7 @@ static size_t inspect(const GRCORE_Context * context, GRCORE_SlotKind kind,
 }
 
 static const GRCORE_EngineDescriptor engine = GRCORE_ENGINE_DESCRIPTOR_INIT("count", NULL, locate, inspect,
-    {scope_count, scope, variable}, {0, 0, 0}, NULL, NULL);
+    {scope_count, scope, variable}, {0, 0, 0}, NULL, NULL, NULL, NULL);
 
 typedef struct {
   GRCORE_EngineId id;

@@ -276,7 +276,7 @@ inline GRCORE_Result variable(const GRCORE_AbstractFrame * frame, size_t scope, 
 }
 
 inline const GRCORE_EngineDescriptor kDescriptor = GRCORE_ENGINE_DESCRIPTOR_INIT("toy", slot_kind, locate, inspect,
-    {scope_count, scope, variable}, {0, 0, 0}, nullptr, nullptr);
+    {scope_count, scope, variable}, {0, 0, 0}, nullptr, nullptr, nullptr, nullptr);
 
 inline bool push_frame(Toy * t, GRCORE_Context * context, int function) {
   GRCORE_Stack * stack = grcore_context_stack(context);

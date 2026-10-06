@@ -76,7 +76,7 @@ static GRCORE_Result fuzz_variable(const GRCORE_AbstractFrame * frame,
 }
 
 static const GRCORE_EngineDescriptor fuzz_engine = GRCORE_ENGINE_DESCRIPTOR_INIT("fuzz", NULL, fuzz_locate,
-    NULL, {fuzz_scope_count, fuzz_scope, fuzz_variable}, {0, 0, 0}, NULL, NULL);
+    NULL, {fuzz_scope_count, fuzz_scope, fuzz_variable}, {0, 0, 0}, NULL, NULL, NULL, NULL);
 
 static GRCORE_Step fuzz_entry(GRCORE_Context * context, void * state) {
   (void)state;
