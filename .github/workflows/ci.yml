@@ -276,7 +276,7 @@ jobs:
   # at: every other job here is ubuntu-latest, so nothing else would stop a
   # commit from breaking the port silently. The descriptor transport is a stub
   # on Windows (and so is `tang --dap`), so this job runs what exists there;
-  # the library has run under wine (tools/xwin/m1-run.sh in the workspace)
+  # the library has run under wine (suite/tools/xwin/m1-run.sh in the workspace)
   # and never on a Windows machine, so this job's first run is the first time
   # it is built and run natively.
   #
