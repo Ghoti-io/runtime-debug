@@ -199,6 +199,55 @@ never reused: when the generation moves, the next stop's ids start above every
 id the last could have issued. A frame id or reference from before a resume is
 therefore unknown, an error response, and never another stop's frame.
 
+## Calls: a pause over a compiled chain (AD-8, AD-28, CAP-3)
+
+Calls as deoptimization exits were milestone 1's defect (Corey, 2026-10-05): a
+compiled function left compiled code at every `CALL`, so a pause saw at most one
+compiled frame, and the engine paid for that with speed. Compiled functions now call
+each other, so a pause, a breakpoint or a step can land fifty compiled frames down.
+The protocol is `runtime-jit`'s ("Calls between compiled functions"), the rebuild of a
+whole chain is `runtime-core`'s ("A, part 5"), and the engine's hooks are lang-tang's;
+this section is only what the debugger relies on.
+
+**Nothing in the debugger changed, and that is the design.** A pause is a stop at a
+poll, and AD-8 says a paused context is interpreter frames: before the debugger's
+handler or the host sees the stop, the engine's deopt hook has rebuilt every compiled
+frame of the chain into the guest frame it already had, in one rebuild that cannot
+fail (each compiled call extended the reservation). So the model, the frame walk, the
+depth that stepping counts (above) and the variables are read from the same frames
+the interpreter would have, with the same identities, and the chain has as many frames
+as the interpreted run's. Resuming continues in the interpreter; the callers re-enter
+compiled code at their next call. A chain paused on one thread resumes on another
+like any pause ("Reading is allowed only where AD-20 says").
+
+**What shows it, in lang-tang** (this library's own tests use a toy engine with no
+compiled code, and none was added here): the pause fifty compiled frames down that
+resumes on another thread under TSan with the uninterrupted run's output
+(`JitCalls.AChainPausedFiftyFramesDownResumesOnAnotherThread`, and the single-thread
+`...APauseFiftyFramesDown...` beside it, in `test_jit_calls.cpp`); the frame
+differential, which compares the whole chain at every poll over a call-heavy corpus
+(`test_observer.cpp`); and a breakpoint in a compiled callee that shows the chain
+frame for frame and whose `stepOut` stops in the compiled caller
+(`TangDap.ABreakpointInACompiledCallee...` in `test_tang_dap.cpp`). No test attaches a
+debugger to a 50-frame pause: the depth is the engine's and the rebuild's, the
+debugger reads frames, and nothing here depends on how many.
+
+**Rejected.**
+
+- *A debugger that reads compiled frames itself.* It would need the code metadata's
+  format, the stack maps and the raw representations (AD-27) to be understood a
+  second time, in a library that today knows only an engine's descriptor, and it could
+  disagree with the interpreter about a frame. The engine converts once, at the pause.
+- *Detaching functions from the JIT while a debugger is attached,* so that there are
+  no compiled frames to read. Then a debugger session would test the interpreter and
+  not the code the program runs; lang-tang reads the statement-poll flag in compiled
+  code instead, so that the compiled function is the one that stops.
+- *Calls as deopt exits,* the defect: it keeps chains at one frame by costing every
+  call a transition.
+
+The call-heavy figures are lang-tang's ("Calls, measured"). This library's benchmarks,
+below, are its own and are not affected by calls.
+
 ## Reading is allowed only where AD-20 says
 
 A context's state may be read only at-poll or paused, and only by the thread
